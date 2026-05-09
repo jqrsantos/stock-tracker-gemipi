@@ -21,12 +21,13 @@ def send_telegram(message: str):
         # We truncate to 4096 which is Telegram's limit
         payload = {
             "chat_id": chat_id,
-            "text": message[:4000], 
-            "parse_mode": "Markdown"
+            "text": message[:4000]
         }
         res = requests.post(url, json=payload, timeout=10)
-        res.raise_for_status()
+        if res.status_code != 200:
+            logger.error(f"Telegram API error {res.status_code}: {res.text}")
+            return False
         return True
     except Exception as e:
-        logger.error(f"Telegram notification failed: {e}")
+        logger.error(f"Telegram network error: {e}")
         return False

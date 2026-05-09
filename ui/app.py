@@ -2,6 +2,7 @@
 import streamlit as st
 import requests
 import os
+import pandas as pd
 
 API_URL = os.getenv("API_URL", "http://api:8000")
 
@@ -25,4 +26,61 @@ with st.sidebar:
         else:
             st.warning("Please enter a ticker symbol")
 
-st.info("Portfolio metrics and transaction entry coming soon...")
+# Performance Section
+st.divider()
+st.subheader("Portfolio Performance")
+try:
+    metrics_res = requests.get(f"{API_URL}/portfolio/metrics")
+    if metrics_res.status_code == 200:
+        m = metrics_res.json()
+        c1, c2 = st.columns(2)
+        c1.metric("Annualized Return (XIRR)", f"{m['xirr']*100:.2f}%")
+        c2.metric("Growth Rate (CAGR)", f"{m['cagr']*100:.2f}%")
+except Exception as e:
+    st.error(f"Metrics fetch failed: {e}")
+
+# Transaction Form
+st.divider()
+st.subheader("Manage Transactions")
+
+with st.expander("➕ Record New Transaction"):
+    with st.form("add_tx", clear_on_submit=True):
+        col1, col2 = st.columns(2)
+        ticker_input = col1.text_input("Ticker").upper()
+        action = col2.selectbox("Action", ["BUY", "SELL"])
+        
+        col3, col4 = st.columns(2)
+        qty = col3.number_input("Quantity", min_value=0.0, format="%.4f")
+        price = col4.number_input("Price", min_value=0.0, format="%.2f")
+        
+        submitted = st.form_submit_button("Submit Transaction")
+        if submitted:
+            if ticker_input and qty > 0 and price > 0:
+                payload = {
+                    "ticker": ticker_input,
+                    "action": action,
+                    "quantity": qty,
+                    "price": price
+                }
+                res = requests.post(f"{API_URL}/transactions/", json=payload)
+                if res.status_code == 200:
+                    st.success(f"Recorded {action} {qty} {ticker_input} @ ${price}")
+                    st.rerun()
+                else:
+                    st.error("Failed to record transaction")
+            else:
+                st.warning("Please fill all fields")
+
+# History Section
+st.divider()
+st.subheader("Transaction History")
+try:
+    tx_res = requests.get(f"{API_URL}/transactions/")
+    if tx_res.status_code == 200:
+        df = pd.DataFrame(tx_res.json())
+        if not df.empty:
+            st.dataframe(df, use_container_width=True)
+        else:
+            st.info("No transactions recorded yet")
+except:
+    st.error("Could not load history")

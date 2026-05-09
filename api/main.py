@@ -88,3 +88,20 @@ def add_transaction(transaction: TransactionCreate, db: Session = Depends(get_db
 @app.get("/transactions/", response_model=List[TransactionResponse])
 def get_transactions(db: Session = Depends(get_db)):
     return db.query(models.Transaction).all()
+
+@app.get("/portfolio/metrics")
+def get_metrics(db: Session = Depends(get_db)):
+    transactions = db.query(models.Transaction).all()
+    if not transactions:
+        return {"xirr": 0.0, "cagr": 0.0}
+        
+    unique_tickers = list(set([tx.ticker for tx in transactions]))
+    current_prices = {}
+    for t in unique_tickers:
+        try:
+            current_prices[t] = fetch_stock_price(t)
+        except:
+            # Fallback or skip if price fetch fails
+            pass
+            
+    return metrics.calculate_portfolio_performance(transactions, current_prices)

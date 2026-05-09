@@ -1,43 +1,73 @@
 from pyxirr import xirr
-import pandas as pd
 from datetime import datetime
+from decimal import Decimal
 
 def calculate_portfolio_performance(transactions, current_prices):
-    """
-    Calculates XIRR for a list of transactions given current market prices.
-    """
     if not transactions:
         return {"xirr": 0.0, "cagr": 0.0}
     
-    dates = []
-    amounts = []
+    now = datetime.utcnow()
+    # Sort transactions by timestamp to ensure last_price is most recent
+    sorted_txs = sorted(transactions, key=lambda x: x.timestamp)
     
-    # Historical Cash Flows
-    for tx in transactions:
+    portfolio = {}
+    dates, amounts = [], []
+    
+    first_date = sorted_txs[0].timestamp
+    total_cost = Decimal('0')
+    
+    for tx in sorted_txs:
+        # Precision: Keep as Decimal
+        qty = Decimal(str(tx.quantity))
+        price = Decimal(str(tx.price))
+        
         dates.append(tx.timestamp)
-        # Cash OUT (BUY) is negative, Cash IN (SELL) is positive
-        value = float(tx.quantity * tx.price)
-        amounts.append(-value if tx.action == "BUY" else value)
-    
-    # Add "Virtual Sell" for current holdings (Cash IN if sold today)
-    for ticker, price in current_prices.items():
-        # Calculate net quantity
-        ticker_txs = [tx for tx in transactions if tx.ticker == ticker]
-        net_qty = sum(tx.quantity if tx.action == "BUY" else -tx.quantity for tx in ticker_txs)
+        val = qty * price
+        amt = -val if tx.action == "BUY" else val
+        amounts.append(float(amt))
         
-        if net_qty > 0:
-            dates.append(datetime.utcnow())
-            amounts.append(float(net_qty * price))
+        if tx.action == "BUY":
+            total_cost += val
+        
+        # Track holdings
+        t = tx.ticker
+        if t not in portfolio:
+            portfolio[t] = {"qty": Decimal('0'), "last_price": price}
+        
+        if tx.action == "BUY":
+            portfolio[t]["qty"] += qty
+        else:
+            portfolio[t]["qty"] -= qty
             
+        portfolio[t]["last_price"] = price # Tracks most recent price as fallback
+
+    # Add current value
+    total_value = Decimal('0')
+    for t, data in portfolio.items():
+        if data["qty"] > 0:
+            # Use current_price or fallback to last_price
+            current_price = current_prices.get(t)
+            if current_price is not None:
+                price = Decimal(str(current_price))
+            else:
+                price = Decimal(str(data["last_price"]))
+                
+            val = data["qty"] * price
+            total_value += val
+            dates.append(now)
+            amounts.append(float(val))
+
+    # XIRR
     try:
-        if len(dates) < 2:
-            return {"xirr": 0.0, "cagr": 0.0}
-        
-        # calculate xirr
-        result = xirr(dates, amounts)
-        if result is None:
-            return {"xirr": 0.0, "cagr": 0.0}
-            
-        return {"xirr": float(result), "cagr": float(result)}
+        x_val = xirr(dates, amounts) or 0.0
     except Exception:
-        return {"xirr": 0.0, "cagr": 0.0}
+        x_val = 0.0
+        
+    # CAGR: (Ending Value / Beginning Value)^(1 / Years) - 1
+    years = (now - first_date).days / 365.25
+    if total_cost > 0 and years > 0:
+        c_val = float(total_value / total_cost) ** (1 / years) - 1
+    else:
+        c_val = 0.0
+
+    return {"xirr": float(x_val), "cagr": float(c_val)}

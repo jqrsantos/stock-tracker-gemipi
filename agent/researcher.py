@@ -1,4 +1,5 @@
 import google.generativeai as genai
+from duckduckgo_search import DDGS
 import os
 import logging
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, func
@@ -27,12 +28,49 @@ api_key = os.getenv("GEMINI_API_KEY")
 if api_key:
     genai.configure(api_key=api_key)
 
+def search_stock_news(ticker: str):
+    """
+    Fetches the latest 5 news items for a given ticker using DuckDuckGo.
+    """
+    try:
+        with DDGS() as ddgs:
+            results = ddgs.news(f"{ticker} stock news", max_results=5)
+            if not results:
+                return f"No recent news found for {ticker}."
+            return "\n".join([f"- {r['title']} ({r['date']}): {r['body']}" for r in results])
+    except Exception as e:
+        return f"Error searching news for {ticker}: {str(e)}"
+
 def perform_daily_research(tickers: list):
     if not api_key: return "API Key missing"
     
+    # Grounding logic
+    grounding_context = []
+    
+    # Ticker news
+    for ticker in tickers:
+        logger.info(f"Fetching news for {ticker}...")
+        news = search_stock_news(ticker)
+        grounding_context.append(f"RECENT NEWS FOR {ticker}:\n{news}")
+        
+    # Global Macro News
+    logger.info("Fetching global macro news...")
+    macro_news = search_stock_news("Global Macro Economic")
+    grounding_context.append(f"GLOBAL MACRO ECONOMIC NEWS:\n{macro_news}")
+    
+    context_text = "\n\n".join(grounding_context)
+    
     model = genai.GenerativeModel('gemini-pro')
-    # Note: In future tasks, we will inject real news here.
-    prompt = f"Analyze {tickers}. Provide macro view and price windows. NOTE: Use your internal knowledge but prioritize reasoning over specific recent dates if data isn't provided."
+    
+    prompt = f"""
+    GROUNDING CONTEXT:
+    {context_text}
+    
+    Analyze the following tickers based on the GROUNDING CONTEXT provided above: {tickers}. 
+    Provide macro view and price windows. 
+    Use the provided GROUNDING CONTEXT specifically for your analysis. 
+    If data is missing for a ticker, state it.
+    """
     
     try:
         response = model.generate_content(prompt)

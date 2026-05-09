@@ -1,13 +1,16 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, Depends, HTTPException
 from contextlib import asynccontextmanager
 from functools import lru_cache
-import yfinance as yf
-import logging
 from pydantic import BaseModel
 from datetime import datetime
 from typing import List, Optional
 from sqlalchemy.orm import Session
-from . import models, database
+import logging
+import yfinance as yf
+
+import models
+import database
+import metrics
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -19,6 +22,17 @@ class TransactionCreate(BaseModel):
     quantity: float
     price: float
     timestamp: Optional[datetime] = None
+
+class TransactionResponse(BaseModel):
+    id: int
+    ticker: str
+    action: str
+    quantity: float
+    price: float
+    timestamp: datetime
+
+    class Config:
+        from_attributes = True
 
 def get_db():
     db = database.SessionLocal()
@@ -56,7 +70,7 @@ def get_price(ticker: str):
         logger.error(f"Error fetching price for {ticker}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
-@app.post("/transactions/")
+@app.post("/transactions/", response_model=TransactionResponse)
 def add_transaction(transaction: TransactionCreate, db: Session = Depends(get_db)):
     # Convert Pydantic model to SQLAlchemy model
     db_tx = models.Transaction(
@@ -71,6 +85,6 @@ def add_transaction(transaction: TransactionCreate, db: Session = Depends(get_db
     db.refresh(db_tx)
     return db_tx
 
-@app.get("/transactions/")
+@app.get("/transactions/", response_model=List[TransactionResponse])
 def get_transactions(db: Session = Depends(get_db)):
     return db.query(models.Transaction).all()

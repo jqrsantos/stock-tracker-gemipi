@@ -64,7 +64,7 @@ with st.expander("➕ Record New Transaction"):
                 }
                 res = requests.post(f"{API_URL}/transactions/", json=payload)
                 if res.status_code == 200:
-                    st.success(f"Recorded {action} {qty} {ticker_input} @ ${price}")
+                    st.toast(f"✅ Recorded {action} {qty} {ticker_input}!", icon="💰")
                     st.rerun()
                 else:
                     st.error("Failed to record transaction")
@@ -79,7 +79,16 @@ try:
     if tx_res.status_code == 200:
         df = pd.DataFrame(tx_res.json())
         if not df.empty:
-            st.dataframe(df, use_container_width=True)
+            df['timestamp'] = pd.to_datetime(df['timestamp'])
+            df = df.sort_values(by='timestamp', ascending=False)
+            st.dataframe(
+                df, 
+                use_container_width=True,
+                column_config={
+                    "price": st.column_config.NumberColumn(format="$ %.2f"),
+                    "quantity": st.column_config.NumberColumn(format="%.4f"),
+                }
+            )
         else:
             st.info("No transactions recorded yet")
 except:

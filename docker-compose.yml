@@ -1,0 +1,30 @@
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
+      POSTGRES_DB: stock_tracker
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  api:
+    build: ./api
+    environment:
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/stock_tracker
+    ports:
+      - "8000:8000"
+
+  ui:
+    build: ./ui
+    ports:
+      - "8501:8501"
+
+  agent:
+    build: ./agent
+    environment:
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/stock_tracker
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+
+volumes:
+  postgres_data:

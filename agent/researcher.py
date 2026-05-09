@@ -1,45 +1,51 @@
 import google.generativeai as genai
 import os
 import logging
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, func
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+from dotenv import load_dotenv
 
-# Configure logging
+load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Configure Gemini
+# DB Setup
+DB_URL = os.getenv("DATABASE_URL")
+engine = create_engine(DB_URL)
+SessionLocal = sessionmaker(bind=engine)
+Base = declarative_base()
+
+class ResearchReport(Base):
+    __tablename__ = "research_reports"
+    id = Column(Integer, primary_key=True)
+    content = Column(String, nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
+
+# Gemini Setup
 api_key = os.getenv("GEMINI_API_KEY")
-if not api_key:
-    logger.warning("GEMINI_API_KEY not found in environment")
-else:
+if api_key:
     genai.configure(api_key=api_key)
 
 def perform_daily_research(tickers: list):
-    """
-    Performs macro analysis and generates buy/sell windows using Gemini.
-    """
-    if not api_key:
-        return "Error: Gemini API key not configured."
-        
+    if not api_key: return "API Key missing"
+    
+    model = genai.GenerativeModel('gemini-pro')
+    # Note: In future tasks, we will inject real news here.
+    prompt = f"Analyze {tickers}. Provide macro view and price windows. NOTE: Use your internal knowledge but prioritize reasoning over specific recent dates if data isn't provided."
+    
     try:
-        model = genai.GenerativeModel('gemini-pro')
-        prompt = (
-            f"Act as a professional stock analyst. Perform a macro-economic analysis "
-            f"for the following tickers: {', '.join(tickers)}. \n\n"
-            "For each stock, provide:\n"
-            "1. A summary of recent news sentiment.\n"
-            "2. Estimated 'Cheap', 'Fair', and 'Expensive' price windows.\n"
-            "3. A 'Buy/Sell/Hold' recommendation based on current sentiment.\n\n"
-            "Also, include a brief Daily Macro Report (Inflation, Interest Rates, Sector moves)."
-        )
-        
-        logger.info(f"Generating research report for {tickers}...")
         response = model.generate_content(prompt)
-        return response.text
+        report_content = response.text
+        
+        # Save to DB
+        db = SessionLocal()
+        new_report = ResearchReport(content=report_content)
+        db.add(new_report)
+        db.commit()
+        db.close()
+        
+        return report_content
     except Exception as e:
-        logger.error(f"Gemini research failed: {e}")
-        return f"Error during research: {str(e)}"
-
-if __name__ == "__main__":
-    # Test run
-    test_tickers = ["AAPL", "TSLA", "NVDA"]
-    print(perform_daily_research(test_tickers))
+        logger.error(f"Failed: {e}")
+        return str(e)

@@ -1,10 +1,5 @@
-fastapi
-uvicorn
+google-generativeai
 sqlalchemy
 psycopg2-binary
-yfinance
-pandas
-streamlit
-google-generativeai
 python-dotenv
 requests

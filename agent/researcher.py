@@ -6,6 +6,7 @@ from sqlalchemy import create_engine, Column, Integer, String, DateTime, func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
+from notifier import send_telegram
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -82,6 +83,9 @@ def perform_daily_research(tickers: list):
         db.add(new_report)
         db.commit()
         db.close()
+        
+        # Notify via Telegram
+        send_telegram(report_content)
         
         return report_content
     except Exception as e:

@@ -20,11 +20,5 @@ services:
     ports:
       - "8501:8501"
 
-  agent:
-    build: ./agent
-    environment:
-      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/stock_tracker
-      GEMINI_API_KEY: ${GEMINI_API_KEY}
-
 volumes:
   postgres_data:

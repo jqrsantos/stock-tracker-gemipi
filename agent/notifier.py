@@ -55,8 +55,13 @@ def send_email(subject: str, body: str):
         msg['From'] = smtp_user
         msg['To'] = email_to
 
-        server = smtplib.SMTP(smtp_server, int(smtp_port))
-        server.starttls()
+        port = int(smtp_port)
+        if port == 465:
+            server = smtplib.SMTP_SSL(smtp_server, port)
+        else:
+            server = smtplib.SMTP(smtp_server, port)
+            server.starttls()
+            
         server.login(smtp_user, smtp_password)
         server.send_message(msg)
         server.quit()

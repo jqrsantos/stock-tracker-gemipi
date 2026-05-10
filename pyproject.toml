@@ -1,0 +1,16 @@
+[project]
+name = "stock-tracker-workspace"
+version = "0.1.0"
+description = "Raspberry Pi Stock Tracker Workspace"
+requires-python = ">=3.11"
+
+[tool.uv]
+managed = true
+dev-dependencies = [
+    "pytest",
+    "black",
+    "isort",
+]
+
+[tool.uv.workspace]
+members = ["api", "ui", "agent", "listener"]

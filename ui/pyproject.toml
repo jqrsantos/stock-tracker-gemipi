@@ -1,11 +1,12 @@
 [project]
-name = "stock-tracker-listener"
+name = "stock-tracker-ui"
 version = "0.1.0"
-description = "Interactive Telegram bot for ad-hoc research"
+description = "Streamlit UI for stock tracking"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "python-telegram-bot",
+    "streamlit",
     "requests",
     "python-dotenv",
+    "pandas",
 ]

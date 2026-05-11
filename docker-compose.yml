@@ -7,25 +7,47 @@ services:
       POSTGRES_DB: stock_tracker
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d stock_tracker"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   api:
     build: ./api
+    # We pass the whole .env file into the container to ensure no variables are missed
+    env_file: .env
     environment:
-      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/stock_tracker
+      - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-password}@db:5432/stock_tracker
     ports:
       - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: always
 
   ui:
     build: ./ui
+    env_file: .env
+    environment:
+      - API_URL=http://api:8000
     ports:
       - "8501:8501"
+    depends_on:
+      api:
+        condition: service_started
+    restart: always
 
   listener:
     build: ./listener
-    environment:
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    env_file: .env
+    volumes:
+      - ./knowledge_base:/app/knowledge_base
+      - ~/.gemini:/root/.gemini
+    depends_on:
+      api:
+        condition: service_started
+    restart: always
 
 volumes:
   postgres_data:

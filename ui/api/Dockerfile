@@ -2,20 +2,19 @@ FROM ghcr.io/astral-sh/uv:latest AS uv
 FROM python:3.11-slim
 
 # Install uv binary
-COPY --from=uv /uv /usr/bin/uv
+COPY --from=uv /usr/bin/uv /usr/bin/uv
 
 WORKDIR /app
 
 # Enable bytecode compilation
 ENV UV_COMPILE_BYTECODE=1
 
-# Copy ONLY the pyproject.toml for this service
+# Copy project files
 COPY pyproject.toml .
 
 # Install dependencies into the system environment
-RUN uv pip install --system --no-cache .
+RUN uv pip install --system --no-cache -e .
 
-# Copy the rest of the app
 COPY . .
 
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

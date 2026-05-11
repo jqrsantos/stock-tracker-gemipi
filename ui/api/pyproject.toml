@@ -1,0 +1,15 @@
+[project]
+name = "stock-tracker-api"
+version = "0.1.0"
+description = "FastAPI backend for stock tracking"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "sqlalchemy",
+    "psycopg2-binary",
+    "yfinance",
+    "pandas",
+    "pyxirr",
+]

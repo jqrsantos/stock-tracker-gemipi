@@ -47,11 +47,18 @@ with st.expander("➕ Record New Transaction"):
     with st.form("add_tx", clear_on_submit=True):
         col1, col2 = st.columns(2)
         ticker_input = col1.text_input("Ticker").upper()
-        action = col2.selectbox("Action", ["BUY", "SELL"])
+        action = col2.selectbox("Action", ["BUY", "SELL", "DIVIDEND"])
         
-        col3, col4 = st.columns(2)
-        qty = col3.number_input("Quantity", min_value=0.0, format="%.4f")
-        price = col4.number_input("Price", min_value=0.0, format="%.2f")
+        col3, col4, col5 = st.columns(3)
+        
+        if action == "DIVIDEND":
+            qty = col3.number_input("Shares Owned at time", min_value=0.0, value=1.0, format="%.4f", help="Set to 1 if you just want to enter the total dividend amount in the Price field.")
+            price = col4.number_input("Dividend Amount (Total or per Share)", min_value=0.0, format="%.2f")
+        else:
+            qty = col3.number_input("Quantity", min_value=0.0, format="%.4f")
+            price = col4.number_input("Price", min_value=0.0, format="%.2f")
+            
+        tx_date = col5.date_input("Date", value=pd.Timestamp.now().date())
         
         submitted = st.form_submit_button("Submit Transaction")
         if submitted:
@@ -60,7 +67,8 @@ with st.expander("➕ Record New Transaction"):
                     "ticker": ticker_input,
                     "action": action,
                     "quantity": qty,
-                    "price": price
+                    "price": price,
+                    "timestamp": tx_date.isoformat()
                 }
                 res = requests.post(f"{API_URL}/transactions/", json=payload)
                 if res.status_code == 200:
@@ -81,14 +89,28 @@ try:
         if not df.empty:
             df['timestamp'] = pd.to_datetime(df['timestamp'])
             df = df.sort_values(by='timestamp', ascending=False)
+            df['date'] = df['timestamp'].dt.date
             st.dataframe(
-                df, 
+                df[['id', 'date', 'ticker', 'action', 'quantity', 'price']], 
                 use_container_width=True,
                 column_config={
+                    "id": st.column_config.NumberColumn("ID"),
                     "price": st.column_config.NumberColumn(format="$ %.2f"),
                     "quantity": st.column_config.NumberColumn(format="%.4f"),
+                    "date": st.column_config.DateColumn("Date")
                 }
             )
+            
+            # Delete Section
+            with st.expander("🗑️ Delete Transaction"):
+                del_id = st.number_input("Enter Transaction ID to Delete", min_value=1, step=1)
+                if st.button("Confirm Delete", type="primary"):
+                    del_res = requests.delete(f"{API_URL}/transactions/{del_id}")
+                    if del_res.status_code == 200:
+                        st.success(f"Deleted transaction {del_id}")
+                        st.rerun()
+                    else:
+                        st.error("Failed to delete transaction")
         else:
             st.info("No transactions recorded yet")
 except:

@@ -1,0 +1,9 @@
+[project]
+name = "listener"
+version = "0.1.0"
+description = "Secure Interactive Telegram Listener"
+requires-python = ">=3.11"
+dependencies = [
+    "python-telegram-bot>=20.0",
+    "requests"
+]

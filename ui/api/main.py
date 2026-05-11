@@ -41,24 +41,10 @@ def get_db():
     finally:
         db.close()
 
-import time
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Initialize DB tables with retries
-    max_retries = 5
-    for i in range(max_retries):
-        try:
-            logger.info(f"Initializing database... (Attempt {i+1}/{max_retries})")
-            models.Base.metadata.create_all(bind=database.engine)
-            logger.info("Database initialized successfully.")
-            break
-        except Exception as e:
-            if i == max_retries - 1:
-                logger.error("Could not connect to database after several attempts.")
-                raise e
-            logger.warning(f"Database not ready, retrying in 5 seconds... ({e})")
-            time.sleep(5)
+    # Initialize DB tables
+    models.Base.metadata.create_all(bind=database.engine)
     yield
 
 app = FastAPI(lifespan=lifespan)
@@ -102,15 +88,6 @@ def add_transaction(transaction: TransactionCreate, db: Session = Depends(get_db
 @app.get("/transactions/", response_model=List[TransactionResponse])
 def get_transactions(db: Session = Depends(get_db)):
     return db.query(models.Transaction).all()
-
-@app.delete("/transactions/{transaction_id}")
-def delete_transaction(transaction_id: int, db: Session = Depends(get_db)):
-    db_tx = db.query(models.Transaction).filter(models.Transaction.id == transaction_id).first()
-    if not db_tx:
-        raise HTTPException(status_code=404, detail="Transaction not found")
-    db.delete(db_tx)
-    db.commit()
-    return {"detail": "Transaction deleted"}
 
 @app.get("/portfolio/metrics")
 def get_metrics(db: Session = Depends(get_db)):

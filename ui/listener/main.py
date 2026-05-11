@@ -65,7 +65,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     
     try:
-        result = subprocess.run(["gemini", "--prompt", prompt, "--yolo", "--skip-trust"], capture_output=True, text=True, timeout=180)
+        result = subprocess.run(["gemini", prompt, "--yes"], capture_output=True, text=True, timeout=180)
         
         if result.returncode == 0:
             output = result.stdout

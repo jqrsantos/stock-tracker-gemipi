@@ -3,6 +3,10 @@ name = "stock-tracker-workspace"
 version = "0.1.0"
 description = "Raspberry Pi Stock Tracker Workspace"
 requires-python = ">=3.11"
+dependencies = [
+    "requests",
+    "python-dotenv",
+]
 
 [tool.uv]
 managed = true

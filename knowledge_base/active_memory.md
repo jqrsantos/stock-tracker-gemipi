@@ -4,6 +4,7 @@ This file maintains continuity across daily research reports. It tracks global m
 
 ## Macro Narrative Log
 
+- **2026-05-13**: Global inflation surging to 4.0% driven by energy shock (Brent 00-20). Fed maintaining 'higher for longer' stance at 3.50%-3.75%. Geopolitical instability in Middle East and Venezuela impacting energy supplies.
 - **2026-05-13**: Federal Reserve maintains interest rates; market expects pivot in Q3.
 - **2024-05-10**: US CPI data came in slightly higher than expected (3.4% YoY). Market is pricing in "higher for longer" interest rates, putting pressure on high-debt utilities and real estate sectors.
 - **2024-05-09**: ECB signaling a potential rate cut in June as Eurozone inflation stabilizes. Bullish for European value stocks with strong export moats.

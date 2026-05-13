@@ -8,3 +8,10 @@ venv/
 build/
 dist/
 *.egg-info/
+Docs/
+/docs/
+/.superpowers/
+.idea/
+stock_tracker.db
+knowledge_base/daily_reports/
+uv.lock

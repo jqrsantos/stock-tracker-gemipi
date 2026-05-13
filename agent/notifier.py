@@ -71,6 +71,7 @@ def send_email(subject: str, body: str):
         return False
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     from dotenv import load_dotenv
     load_dotenv()
     

@@ -7,7 +7,8 @@ class Transaction(Base):
     ticker = Column(String, index=True, nullable=False)
     action = Column(String, nullable=False)  # BUY or SELL
     quantity = Column(Numeric(18, 8), nullable=False)
-    price = Column(Numeric(18, 8), nullable=False)
+    price = Column(Numeric(18, 8), nullable=False) # Native price
+    currency = Column(String, nullable=False, default="EUR")
     timestamp = Column(DateTime, server_default=func.now())
 
 class ResearchReport(Base):

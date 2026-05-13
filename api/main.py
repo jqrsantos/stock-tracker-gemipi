@@ -5,8 +5,10 @@ from pydantic import BaseModel
 from datetime import datetime
 from typing import List, Optional
 from sqlalchemy.orm import Session
+from decimal import Decimal
 import logging
 import yfinance as yf
+import pandas as pd
 
 import models
 import database
@@ -21,6 +23,7 @@ class TransactionCreate(BaseModel):
     action: str
     quantity: float
     price: float
+    currency: str = "EUR"
     timestamp: Optional[datetime] = None
 
 class TransactionResponse(BaseModel):
@@ -29,6 +32,7 @@ class TransactionResponse(BaseModel):
     action: str
     quantity: float
     price: float
+    currency: str
     timestamp: datetime
 
     class Config:
@@ -64,20 +68,26 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 @lru_cache(maxsize=100)
-def fetch_stock_price(ticker: str):
+def fetch_stock_info(ticker: str):
     stock = yf.Ticker(ticker)
     history = stock.history(period="1d")
     if history.empty:
-        return None
-    return float(history['Close'].iloc[-1])
+        return None, None
+    price = float(history['Close'].iloc[-1])
+    # Fetch currency from info, default to USD if not found
+    try:
+        currency = stock.info.get('currency', 'USD')
+    except:
+        currency = 'USD'
+    return price, currency
 
 @app.get("/price/{ticker}")
 def get_price(ticker: str):
     try:
-        price = fetch_stock_price(ticker)
+        price, currency = fetch_stock_info(ticker)
         if price is None:
             raise HTTPException(status_code=404, detail="Ticker not found")
-        return {"ticker": ticker, "price": price}
+        return {"ticker": ticker, "price": price, "currency": currency}
     except HTTPException:
         raise
     except Exception as e:
@@ -86,18 +96,48 @@ def get_price(ticker: str):
 
 @app.post("/transactions/", response_model=TransactionResponse)
 def add_transaction(transaction: TransactionCreate, db: Session = Depends(get_db)):
-    # Convert Pydantic model to SQLAlchemy model
-    db_tx = models.Transaction(
-        ticker=transaction.ticker,
-        action=transaction.action,
-        quantity=transaction.quantity,
-        price=transaction.price,
-        timestamp=transaction.timestamp if transaction.timestamp else datetime.utcnow()
-    )
-    db.add(db_tx)
-    db.commit()
-    db.refresh(db_tx)
-    return db_tx
+    try:
+        # Convert Pydantic model to SQLAlchemy model
+        db_tx = models.Transaction(
+            ticker=transaction.ticker,
+            action=transaction.action,
+            quantity=transaction.quantity,
+            price=transaction.price,
+            currency=transaction.currency,
+            timestamp=transaction.timestamp if transaction.timestamp else datetime.utcnow()
+        )
+        db.add(db_tx)
+        db.commit()
+        db.refresh(db_tx)
+        logger.info(f"Added transaction: {db_tx.id} for {db_tx.ticker}")
+        return db_tx
+    except Exception as e:
+        logger.error(f"Error adding transaction: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/transactions/batch")
+def add_transactions_batch(transactions: List[TransactionCreate], db: Session = Depends(get_db)):
+    try:
+        db_txs = []
+        for tx in transactions:
+            db_tx = models.Transaction(
+                ticker=tx.ticker,
+                action=tx.action,
+                quantity=tx.quantity,
+                price=tx.price,
+                currency=tx.currency,
+                timestamp=tx.timestamp if tx.timestamp else datetime.utcnow()
+            )
+            db.add(db_tx)
+            db_txs.append(db_tx)
+        db.commit()
+        logger.info(f"Added {len(db_txs)} transactions in batch")
+        return {"count": len(db_txs)}
+    except Exception as e:
+        logger.error(f"Error adding batch transactions: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/transactions/", response_model=List[TransactionResponse])
 def get_transactions(db: Session = Depends(get_db)):
@@ -112,19 +152,87 @@ def delete_transaction(transaction_id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"detail": "Transaction deleted"}
 
+def get_exchange_rate(from_currency: str, to_currency: str, date_obj: Optional[datetime] = None):
+    if from_currency == to_currency:
+        return 1.0
+    # Handle GBp (Pence)
+    actual_from = "GBP" if from_currency == "GBp" else from_currency
+    ticker = f"{actual_from}{to_currency}=X"
+    try:
+        stock = yf.Ticker(ticker)
+        if date_obj:
+            # Fetch historical rate
+            start_date = date_obj.strftime('%Y-%m-%d')
+            # End date should be at least one day after
+            end_date = (date_obj + pd.Timedelta(days=1)).strftime('%Y-%m-%d')
+            hist = stock.history(start=start_date, end=end_date)
+            if not hist.empty:
+                rate = float(hist['Close'].iloc[0])
+                logger.info(f"Historical rate for {ticker} on {start_date}: {rate}")
+                return rate / 100.0 if from_currency == "GBp" else rate
+            else:
+                logger.warning(f"No historical data for {ticker} on {start_date}")
+        
+        # Fallback to current rate
+        history = stock.history(period="1d")
+        if not history.empty:
+            rate = float(history['Close'].iloc[-1])
+            logger.info(f"Current rate for {ticker}: {rate}")
+            return rate / 100.0 if from_currency == "GBp" else rate
+        
+        logger.warning(f"No data found for {ticker}, returning 1.0")
+        return 1.0
+    except Exception as e:
+        logger.error(f"Error fetching exchange rate for {ticker}: {e}")
+        return 1.0
+
 @app.get("/portfolio/metrics")
 def get_metrics(db: Session = Depends(get_db)):
     transactions = db.query(models.Transaction).all()
     if not transactions:
         return {"xirr": 0.0, "cagr": 0.0}
+    
+    # Pre-calculate EUR prices for all transactions
+    eur_transactions = []
+    exchange_rates_cache = {}
+
+    class MockTx:
+        def __init__(self, t, a, q, p, ts, id):
+            self.ticker = t
+            self.action = a
+            self.quantity = q
+            self.price = Decimal(str(p))
+            self.timestamp = ts
+            self.id = id
+
+    def get_cached_rate(from_curr, to_curr, dt):
+        if from_curr == to_curr: return 1.0
+        # Use date as key for historical cache
+        key = (from_curr, to_curr, dt.date() if dt else None)
+        if key not in exchange_rates_cache:
+            exchange_rates_cache[key] = get_exchange_rate(from_curr, to_curr, dt)
+        return exchange_rates_cache[key]
+
+    for tx in transactions:
+        rate = get_cached_rate(tx.currency, "EUR", tx.timestamp)
+        eur_price = float(tx.price) * rate
+        eur_transactions.append(MockTx(tx.ticker, tx.action, tx.quantity, eur_price, tx.timestamp, tx.id))
         
-    unique_tickers = list(set([tx.ticker for tx in transactions]))
+    unique_tickers = list(set([tx.ticker for tx in transactions if tx.ticker != "CASH"]))
+    
     current_prices = {}
     for t in unique_tickers:
         try:
-            current_prices[t] = fetch_stock_price(t)
+            raw_price, currency = fetch_stock_info(t)
+            if raw_price is None: continue
+            
+            # Use current rate for current price
+            rate = get_cached_rate(currency, "EUR", None)
+            current_prices[t] = raw_price * rate
         except:
-            # Fallback or skip if price fetch fails
             pass
             
-    return metrics.calculate_portfolio_performance(transactions, current_prices)
+    usd_eur_rate = get_cached_rate("USD", "EUR", None)
+    data = metrics.calculate_portfolio_performance(eur_transactions, current_prices)
+    data["usd_eur_rate"] = usd_eur_rate
+    return data

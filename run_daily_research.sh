@@ -1,22 +1,27 @@
 #!/bin/bash
 
-cd "$(dirname "$0")"
+# Navigate to the project directory
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR"
 
-# 1. Fetch current unique tickers from the API (requires jq to be installed on Pi)
-PORTFOLIO_TICKERS=$(curl -s http://localhost:8000/transactions/ | jq -r '.[].ticker' | sort | uniq | paste -sd, -)
+# 1. Fetch current unique tickers from the API
+# Use full paths for cron reliability
+CURL_BIN=$(command -v curl || echo "/usr/bin/curl")
+JQ_BIN=$(command -v jq || echo "/usr/bin/jq")
+
+PORTFOLIO_TICKERS=$($CURL_BIN -s http://localhost:8000/transactions/ | $JQ_BIN -r '.[].ticker' | sort | uniq | paste -sd, -)
 
 if [ -z "$PORTFOLIO_TICKERS" ] || [ "$PORTFOLIO_TICKERS" == "null" ]; then
   PORTFOLIO_TICKERS="No stocks currently in portfolio."
 fi
 
-# 2. Execute Gemini CLI
-gemini --prompt "You are an expert financial analyst. 
+# 2. Execute Gemini CLI and CAPTURE the output
+# We explicitly tell it to use its tools to read/write files.
+GEMINI_BIN=$(command -v gemini || echo "$HOME/.nvm/versions/node/v20.20.1/bin/gemini")
 
-1. **Portfolio Review:** Using google_web_search, fetch today's top financial news and analyst ratings for the following stocks currently in my portfolio: $PORTFOLIO_TICKERS. Provide explicit SELL, HOLD, or BUY targets for each based on current momentum and fundamentals.
-2. **Macro Economics:** Search for the latest global macro economic data (Inflation, Fed Rates, Sector rotation). 
-   - Read the existing context in 'knowledge_base/macro_trends.md'.
-   - Compare today's macro news against the existing context to identify ongoing trends.
-3. **Promising Opportunities:** Search the web for 2-3 NEW stocks outside of my portfolio that look highly promising right now based on the macro environment. Provide a brief thesis for each.
-4. **Knowledge Base Update:** Append today's Macro summary to 'knowledge_base/macro_trends.md' (append only, do not overwrite history).
-5. **Report Generation:** Save the complete Daily Report (Portfolio review, Macro analysis, Promising stocks) as a markdown file in 'knowledge_base/daily_reports/$(date +%Y-%m-%d)-report.md'.
-6. **Notification:** Finally, run 'uv run python agent/notifier.py' to send the report to Telegram." --yolo --skip-trust
+$GEMINI_BIN --prompt "You are a senior financial research agent. Use your 'Buffett Strategic Analyst' skill to perform a Deep Scour, evaluate the portfolio, hunt for bargains, and update the knowledge base. Ensure you update the active memory and write the final report. Print 'REPORT_COMPLETE' when finished." --yolo --skip-trust
+
+# 3. Trigger the Notifier
+# We run the notifier which will find the file the agent just wrote.
+UV_BIN=$(command -v uv || echo "$HOME/.local/bin/uv")
+$UV_BIN run python agent/notifier.py

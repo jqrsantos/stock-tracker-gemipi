@@ -218,10 +218,12 @@ def get_metrics(db: Session = Depends(get_db)):
         eur_price = float(tx.price) * rate
         eur_transactions.append(MockTx(tx.ticker, tx.action, tx.quantity, eur_price, tx.timestamp, tx.id))
         
-    unique_tickers = list(set([tx.ticker for tx in transactions if tx.ticker != "CASH"]))
+    # Only fetch current prices for stocks with an open position
+    open_positions = metrics.get_open_positions(eur_transactions)
+    open_tickers = list(open_positions.keys())
     
     current_prices = {}
-    for t in unique_tickers:
+    for t in open_tickers:
         try:
             raw_price, currency = fetch_stock_info(t)
             if raw_price is None: continue
@@ -236,3 +238,8 @@ def get_metrics(db: Session = Depends(get_db)):
     data = metrics.calculate_portfolio_performance(eur_transactions, current_prices)
     data["usd_eur_rate"] = usd_eur_rate
     return data
+
+@app.get("/portfolio/holdings")
+def get_holdings(db: Session = Depends(get_db)):
+    transactions = db.query(models.Transaction).all()
+    return metrics.get_open_positions(transactions)

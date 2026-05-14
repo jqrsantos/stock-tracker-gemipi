@@ -243,3 +243,35 @@ def calculate_portfolio_performance(transactions, current_prices):
         ],
         "invested_series": portfolio_history
     }
+
+def get_open_positions(transactions):
+    """
+    Returns a dictionary of ticker: quantity for all currently open stock positions.
+    Ignores CASH tickers and filters out closed or near-zero positions.
+    """
+    if not transactions:
+        return {}
+    
+    try:
+        sorted_txs = sorted(transactions, key=lambda x: (x.timestamp.date() if hasattr(x.timestamp, 'date') else x.timestamp, getattr(x, 'id', 0)))
+    except:
+        sorted_txs = sorted(transactions, key=lambda x: x.timestamp)
+    
+    holdings = {}
+    
+    for tx in sorted_txs:
+        t = tx.ticker.strip().upper()
+        if t == "CASH": continue
+        
+        qty = Decimal(str(tx.quantity)).quantize(Decimal('1.00000000'))
+        
+        if tx.action == "BUY":
+            if t not in holdings: holdings[t] = Decimal('0')
+            holdings[t] += qty
+        elif tx.action == "SELL":
+            if t in holdings:
+                holdings[t] -= qty
+                if holdings[t] < Decimal('0.000001'):
+                    holdings.pop(t)
+    
+    return {t: float(q) for t, q in holdings.items() if q > 0}

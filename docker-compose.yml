@@ -7,6 +7,8 @@ services:
       POSTGRES_DB: stock_tracker
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
     restart: always
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d stock_tracker"]

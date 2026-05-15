@@ -62,24 +62,21 @@ class PortfolioEvaluator:
 
     def get_unique_tickers(self) -> List[str]:
         """
-        Fetches unique tickers from the portfolio API.
+        Fetches only currently held tickers from the portfolio API.
         """
         try:
-            logger.info(f"Fetching transactions from {API_BASE_URL}/transactions/...")
-            response = requests.get(f"{API_BASE_URL}/transactions/", timeout=5)
+            logger.info(f"Fetching open positions from {API_BASE_URL}/portfolio/holdings...")
+            response = requests.get(f"{API_BASE_URL}/portfolio/holdings", timeout=5)
             response.raise_for_status()
-            transactions = response.json()
+            holdings = response.json()
             
-            # Extract unique tickers, excluding CASH
-            tickers = sorted(list(set(
-                tx['ticker'] for tx in transactions 
-                if tx.get('ticker') and tx['ticker'] != "CASH"
-            )))
+            # holdings is a dict {ticker: quantity}
+            tickers = sorted(list(holdings.keys()))
             
-            logger.info(f"Found {len(tickers)} unique tickers in portfolio: {', '.join(tickers)}")
+            logger.info(f"Found {len(tickers)} open positions: {', '.join(tickers)}")
             return tickers
         except requests.exceptions.RequestException as e:
-            logger.error(f"Failed to fetch portfolio data: {e}")
+            logger.error(f"Failed to fetch holdings data: {e}")
             return []
 
     def evaluate(self, ticker: str) -> Dict:

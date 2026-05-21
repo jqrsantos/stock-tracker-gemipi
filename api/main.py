@@ -38,6 +38,33 @@ class TransactionResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class BargainCreate(BaseModel):
+    ticker: str
+    name: str
+    industry: str
+    current_price: float
+    currency: str = "USD"
+    bargain_price: float
+    fair_price: float
+    expensive_price: float
+    rationale: str
+
+class BargainResponse(BaseModel):
+    id: int
+    ticker: str
+    name: str
+    industry: str
+    current_price: float
+    currency: str
+    bargain_price: float
+    fair_price: float
+    expensive_price: float
+    rationale: str
+    timestamp: datetime
+
+    class Config:
+        from_attributes = True
+
 def get_db():
     db = database.SessionLocal()
     try:
@@ -243,3 +270,35 @@ def get_metrics(db: Session = Depends(get_db)):
 def get_holdings(db: Session = Depends(get_db)):
     transactions = db.query(models.Transaction).all()
     return metrics.get_open_positions(transactions)
+
+@app.post("/bargains/", response_model=BargainResponse)
+def add_bargain(bargain: BargainCreate, db: Session = Depends(get_db)):
+    try:
+        db_bargain = models.Bargain(
+            ticker=bargain.ticker.upper(),
+            name=bargain.name,
+            industry=bargain.industry,
+            current_price=bargain.current_price,
+            currency=bargain.currency,
+            bargain_price=bargain.bargain_price,
+            fair_price=bargain.fair_price,
+            expensive_price=bargain.expensive_price,
+            rationale=bargain.rationale
+        )
+        db.add(db_bargain)
+        db.commit()
+        db.refresh(db_bargain)
+        logger.info(f"Recorded bargain stock: {db_bargain.ticker}")
+        return db_bargain
+    except Exception as e:
+        logger.error(f"Error adding bargain: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/bargains/", response_model=List[BargainResponse])
+def get_bargains(db: Session = Depends(get_db)):
+    try:
+        return db.query(models.Bargain).order_by(models.Bargain.timestamp.desc()).all()
+    except Exception as e:
+        logger.error(f"Error fetching bargains: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

@@ -19,7 +19,7 @@ fi
 # We explicitly tell it to use its tools to read/write files.
 GEMINI_BIN=$(command -v gemini || echo "$HOME/.nvm/versions/node/v20.20.1/bin/gemini")
 
-$GEMINI_BIN --prompt "You are a senior financial research agent. Use your 'Buffett Strategic Analyst' skill to perform a Deep Scour, evaluate the current portfolio holdings: ($PORTFOLIO_TICKERS). Hunt for bargains, and update the knowledge base. Ensure you update the active memory and write the final report. Print 'REPORT_COMPLETE' when finished." --yolo --skip-trust
+$GEMINI_BIN --prompt "You are a senior financial research agent. Use your 'Buffett Strategic Analyst' skill to perform a Deep Scour, evaluate the current portfolio holdings: ($PORTFOLIO_TICKERS). Hunt for bargains, calculate dynamic price intervals (bargain, fair, expensive) for each bargain pick, persist them using the 'POST /bargains/' API endpoint, and update the knowledge base. Ensure you update the active memory and write the final report. Print 'REPORT_COMPLETE' when finished." --yolo --skip-trust
 
 # 3. Completion
 # The agent now handles its own notifications as per the SKILL.md mandate.

@@ -2,6 +2,7 @@ import os
 import subprocess
 import logging
 import smtplib
+import requests
 from email.message import EmailMessage
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes

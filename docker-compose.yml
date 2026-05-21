@@ -44,6 +44,8 @@ services:
   listener:
     build: ./listener
     env_file: .env
+    environment:
+      - API_URL=http://api:8000
     volumes:
       - ./knowledge_base:/app/knowledge_base
       - ~/.gemini:/root/.gemini

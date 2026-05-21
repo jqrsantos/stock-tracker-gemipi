@@ -21,7 +21,6 @@ GEMINI_BIN=$(command -v gemini || echo "$HOME/.nvm/versions/node/v20.20.1/bin/ge
 
 $GEMINI_BIN --prompt "You are a senior financial research agent. Use your 'Buffett Strategic Analyst' skill to perform a Deep Scour, evaluate the current portfolio holdings: ($PORTFOLIO_TICKERS). Hunt for bargains, and update the knowledge base. Ensure you update the active memory and write the final report. Print 'REPORT_COMPLETE' when finished." --yolo --skip-trust
 
-# 3. Trigger the Notifier
-# We run the notifier which will find the file the agent just wrote.
-UV_BIN=$(command -v uv || echo "$HOME/.local/bin/uv")
-$UV_BIN run python agent/notifier.py
+# 3. Completion
+# The agent now handles its own notifications as per the SKILL.md mandate.
+echo "Research task initiated. Agent will notify upon completion."

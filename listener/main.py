@@ -106,8 +106,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     
     try:
-        # Use agy CLI with --yolo and --skip-trust for autonomous research
-        result = subprocess.run(["agy", "--prompt", prompt, "--yolo", "--skip-trust"], capture_output=True, text=True, timeout=180)
+        # Use agy CLI with --dangerously-skip-permissions for autonomous research
+        result = subprocess.run(["agy", "--prompt", prompt, "--dangerously-skip-permissions"], capture_output=True, text=True, timeout=180)
         
         if result.returncode == 0:
             output = result.stdout

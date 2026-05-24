@@ -1,11 +1,9 @@
 FROM ghcr.io/astral-sh/uv:latest AS uv
 FROM python:3.11-slim
 
-# Install Node.js and Gemini CLI
+# Install curl and Antigravity CLI (agy)
 RUN apt-get update && apt-get install -y curl && \
-    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
-    apt-get install -y nodejs && \
-    npm install -g @google/gemini-cli && \
+    curl -fsSL https://antigravity.google/cli/install.sh | bash && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 COPY --from=uv /uv /usr/bin/uv

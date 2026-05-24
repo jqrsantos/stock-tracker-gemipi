@@ -6,16 +6,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
-@dataclass
-class StockData:
-    ticker: str
-    name: str
-    industry: str
-    roic: float  # Return on Invested Capital (as decimal, e.g., 0.16 for 16%)
-    debt_to_equity: float
-    fcf_yield: float  # Free Cash Flow Yield (as decimal, e.g., 0.06 for 6%)
-    current_pe: float
-    pe_5yr_avg: float
+from data_fetcher import YFinanceFetcher, StockData
 
 class PeacefulFilter:
     """
@@ -75,47 +66,40 @@ class BuffettQuantitativeFilter:
 
         return filtered_stocks
 
-class DataFetcher:
-    """
-    Interface for fetching stock data.
-    """
-    def fetch_stocks(self, tickers: List[str]) -> List[StockData]:
-        raise NotImplementedError("Subclasses must implement fetch_stocks")
-
-# Example of a Mock Data Fetcher for testing
-class MockDataFetcher(DataFetcher):
-    def __init__(self, mock_data: List[StockData]):
-        self.mock_data = mock_data
-
-    def fetch_stocks(self, tickers: List[str]) -> List[StockData]:
-        # Filter mock data by tickers if provided, else return all
-        if not tickers:
-            return self.mock_data
-        return [s for s in self.mock_data if s.ticker in tickers]
-
 if __name__ == "__main__":
-    # Example usage
-    sample_data = [
-        StockData(
-            ticker="AAPL", name="Apple Inc.", industry="Consumer Electronics",
-            roic=0.25, debt_to_equity=0.8, fcf_yield=0.06, current_pe=25, pe_5yr_avg=28
-        ),
-        StockData(
-            ticker="LMT", name="Lockheed Martin", industry="Aerospace & Defense",
-            roic=0.20, debt_to_equity=0.5, fcf_yield=0.07, current_pe=15, pe_5yr_avg=18
-        ),
-        StockData(
-            ticker="KO", name="Coca-Cola", industry="Beverages",
-            roic=0.12, debt_to_equity=1.2, fcf_yield=0.04, current_pe=24, pe_5yr_avg=22
-        )
+    # Curated list of high-quality, stable non-defense global candidates
+    curated_tickers = [
+        "AAPL", "MSFT", "GOOGL", "AMZN", "KO", "PEP", "PG", "JNJ", 
+        "COST", "MCD", "NKE", "V", "MA", "ADBE", "CRM"
     ]
     
-    fetcher = MockDataFetcher(sample_data)
-    stocks = fetcher.fetch_stocks(["AAPL", "LMT", "KO"])
+    logger.info(f"Starting real-data bargain scanning for: {', '.join(curated_tickers)}")
+    fetcher = YFinanceFetcher()
     
+    stocks = []
+    for ticker in curated_tickers:
+        data = fetcher.fetch_data(ticker)
+        if data and not data.is_too_hard:
+            stocks.append(data)
+        elif data and data.is_too_hard:
+            logger.info(f"Skipping {ticker} - Classified as 'Too Hard': {data.error_message}")
+
     buffett_filter = BuffettQuantitativeFilter()
     results = buffett_filter.filter(stocks)
     
-    print("\nFiltered Results:")
+    print("\n" + "="*80)
+    print(f"{'REAL-DATA BUFFETT BARGAIN IDENTIFIED':^80}")
+    print("="*80)
+    if not results:
+        print("No stock candidates met all strict Warren Buffett quantitative criteria today.")
     for res in results:
-        print(f"- {res.ticker}: {res.name}")
+        print(f"Ticker: {res.ticker:<8} | Name: {res.name:<25}")
+        print(f"  Industry: {res.industry:<30}")
+        print(f"  ROIC: {res.roic*100:>5.1f}% | Debt/Equity: {res.debt_to_equity:>5.2f} | FCF Yield: {res.fcf_yield*100:>5.1f}%")
+        print(f"  Current Price: {res.current_price:>7.2f} {res.currency}")
+        print(f"  Calculated Dynamic Price Intervals (10-Yr DCF Model):")
+        print(f"    - [BARGAIN PRICE]:   {res.bargain_price:>7.2f} {res.currency} (30% Margin of Safety)")
+        print(f"    - [FAIR PRICE]:      {res.fair_price:>7.2f} {res.currency}")
+        print(f"    - [EXPENSIVE PRICE]: {res.expensive_price:>7.2f} {res.currency}")
+        print("-"*80)
+    print("="*80)

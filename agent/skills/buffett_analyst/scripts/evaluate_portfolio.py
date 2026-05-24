@@ -21,43 +21,13 @@ logger = logging.getLogger(__name__)
 # Constants
 API_BASE_URL = "http://localhost:8000"
 
-@dataclass
-class StockData:
-    ticker: str
-    roic: float
-    debt_to_equity: float
-    fcf_yield: float
-    current_pe: float
-    pe_5yr_avg: float
-
-class DataFetcher:
-    """
-    Fetches financial data for stocks.
-    Mock implementation for Task 3.
-    """
-    def fetch_data(self, ticker: str) -> Optional[StockData]:
-        # Mocked data for demonstration
-        # In Task 3, we mock the data fetching or use a simple placeholder.
-        mock_data = {
-            "NVDA": StockData("NVDA", 0.45, 0.2, 0.03, 75, 50),
-            "EDP.SG": StockData("EDP.SG", 0.08, 1.5, 0.06, 15, 18),
-            "AAPL": StockData("AAPL", 0.25, 0.8, 0.06, 25, 28),
-            "KO": StockData("KO", 0.12, 1.2, 0.04, 24, 22),
-            "MSFT": StockData("MSFT", 0.20, 0.4, 0.05, 30, 32),
-            "GOOGL": StockData("GOOGL", 0.18, 0.1, 0.07, 22, 25),
-        }
-        
-        if ticker in mock_data:
-            return mock_data[ticker]
-        
-        # Generic mock for other tickers (Passes Buffett health check)
-        return StockData(ticker, 0.18, 0.4, 0.06, 18, 22)
+from data_fetcher import YFinanceFetcher, StockData
 
 class PortfolioEvaluator:
     """
     Evaluates portfolio health using Buffett principles.
     """
-    def __init__(self, fetcher: DataFetcher):
+    def __init__(self, fetcher: YFinanceFetcher):
         self.fetcher = fetcher
 
     def get_unique_tickers(self) -> List[str]:
@@ -86,6 +56,16 @@ class PortfolioEvaluator:
         data = self.fetcher.fetch_data(ticker)
         if not data:
             return {"ticker": ticker, "advice": "N/A", "reason": "No data available"}
+
+        if data.is_too_hard:
+            return {
+                "ticker": ticker,
+                "roic": data.roic,
+                "debt_to_equity": data.debt_to_equity,
+                "fcf_yield": data.fcf_yield,
+                "advice": "HOLD",
+                "reason": f"Too Hard to value reliably: {data.error_message}"
+            }
 
         # Buffett-style health check:
         # 1. ROIC > 15%
@@ -143,6 +123,6 @@ class PortfolioEvaluator:
         print("="*80)
 
 if __name__ == "__main__":
-    fetcher = DataFetcher()
+    fetcher = YFinanceFetcher()
     evaluator = PortfolioEvaluator(fetcher)
     evaluator.run_report()

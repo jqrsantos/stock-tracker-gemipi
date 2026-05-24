@@ -81,13 +81,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"- {holdings_context}\n"
         f"- **Active Memory (Macro):**\n{active_memory}\n\n"
         f"**Instructions:**\n"
-        f"1. Use google_web_search to find latest news, financials (ROIC, Debt/Equity, FCF Yield), and current price for '{ticker}'.\n"
-        f"2. Apply the 'Buffett Check': High-quality business? Margin of safety?\n"
-        f"3. **STRICT MANDATE:** Verify if the company is 'Peaceful'.\n"
+        f"1. Run the python script 'agent/skills/buffett_analyst/scripts/evaluate_portfolio.py' or use yfinance directly in python to fetch real-time financial statements (Balance Sheet, Income Statement, Cash Flow) for '{ticker}'. DO NOT do a superficial Google Web search for financial numbers.\n"
+        f"2. Apply the 'Buffett Check' using real values: ROIC > 15%, Debt/Equity < 1.0, FCF Yield > 5%.\n"
+        f"3. Perform a rigorous 10-year Discounted Cash Flow (DCF) model of Owner Earnings (Free Cash Flow) using a 10% discount rate and 2% terminal growth rate to find the Intrinsic Value. If FCF is negative or erratic, classify the stock as 'Too Hard' to value and return an AVOID/HOLD with a warning.\n"
+        f"4. Calculate dynamic price intervals based on the calculated Intrinsic Value:\n"
+        f"   - Bargain Price: Intrinsic Value * 0.70 (30% Margin of Safety)\n"
+        f"   - Fair Price: Intrinsic Value\n"
+        f"   - Expensive Price: Intrinsic Value * 1.20\n"
+        f"5. **STRICT MANDATE:** Verify if the company is 'Peaceful'.\n"
         f"   - STRICTLY EXCLUDE: Companies that directly manufacture weapon systems, munitions, firearms, tactical hardware, military explosives, nuclear weapons, or warships (e.g., Lockheed Martin, Raytheon, Northrop Grumman), AND companies producing specialized software or systems designed specifically for intelligence, espionage, surveillance, warfare, and tactical combat operations (e.g., Palantir).\n"
         f"   - EXPLICITLY ALLOW: Companies producing general-purpose or dual-use technologies (e.g., standard consumer electronics, microchips, GPUs, enterprise software, general search/cloud infrastructure, commercial aviation) even if they have partnerships, research relationships, or general contracts with defense departments (e.g., NVIDIA, Microsoft, Google), unless their direct products are weapons or dedicated combat/espionage systems. If the stock is NOT peaceful according to these exact guidelines, your Action must be 'SELL' or 'AVOID' with a clear warning.\n"
-        f"4. Do NOT run any external notification scripts (like notifier.py). Your response will be handled by the caller.\n"
-        f"5. Format your response exactly like this:\n\n"
+        f"6. Do NOT run any external notification scripts (like notifier.py). Your response will be handled by the caller.\n"
+        f"7. Format your response exactly like this:\n\n"
         f"--- TELEGRAM SUMMARY ---\n"
         f"**Target Stock:** {ticker} - $PRICE\n"
         f"**Action:** BUY/HOLD/SELL/AVOID\n"
@@ -101,8 +106,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     
     try:
-        # Use gemini CLI with --yolo and --skip-trust for autonomous research
-        result = subprocess.run(["gemini", "--prompt", prompt, "--yolo", "--skip-trust"], capture_output=True, text=True, timeout=180)
+        # Use agy CLI with --yolo and --skip-trust for autonomous research
+        result = subprocess.run(["agy", "--prompt", prompt, "--yolo", "--skip-trust"], capture_output=True, text=True, timeout=180)
         
         if result.returncode == 0:
             output = result.stdout
@@ -114,7 +119,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(summary[:4000])
             send_email(f"Stock Investigation: {ticker}", full_report)
         else:
-            logger.error(f"Gemini CLI Error: {result.stderr}")
+            logger.error(f"Antigravity CLI (agy) Error: {result.stderr}")
             await update.message.reply_text("❌ An error occurred while generating the report. Please check the server logs.")
             
     except subprocess.TimeoutExpired:

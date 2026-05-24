@@ -1,0 +1,250 @@
+#!/usr/bin/env python3
+"""
+Centralized yfinance Financial Statement Fetcher and Intrinsic Value Calculator.
+Computes true Warren Buffett investing metrics: ROIC, Debt/Equity, FCF Yield, and 10-Year DCF.
+"""
+
+import logging
+import sys
+import yfinance as yf
+from dataclasses import dataclass
+from typing import Optional, List
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+logger = logging.getLogger(__name__)
+
+@dataclass
+class StockData:
+    ticker: str
+    name: str
+    industry: str
+    roic: float
+    debt_to_equity: float
+    fcf_yield: float
+    current_pe: float
+    pe_5yr_avg: float
+    intrinsic_value: float = 0.0
+    bargain_price: float = 0.0
+    fair_price: float = 0.0
+    expensive_price: float = 0.0
+    current_price: float = 0.0
+    currency: str = "USD"
+    is_too_hard: bool = False
+    error_message: str = ""
+
+class YFinanceFetcher:
+    """
+    Fetches real financial data from Yahoo Finance and performs fundamental/DCF calculations.
+    """
+    
+    def safe_get_row(self, df, keys: List[str], default: float = 0.0) -> float:
+        """
+        Safely retrieves the most recent annual value for given keys in a DataFrame.
+        """
+        if df is None or df.empty:
+            return default
+        for key in keys:
+            if key in df.index:
+                # get most recent year (first column in yfinance)
+                val = df.loc[key]
+                # If it's a series/array, get the first item
+                if hasattr(val, 'iloc'):
+                    val = val.iloc[0]
+                # Check for NaN/None
+                if val == val and val is not None:
+                    return float(val)
+        return default
+
+    def fetch_data(self, ticker: str) -> Optional[StockData]:
+        """
+        Fetches financials for a ticker and calculates key value ratios and intrinsic value.
+        """
+        try:
+            logger.info(f"Fetching real market data for ticker: {ticker}...")
+            yf_ticker = yf.Ticker(ticker)
+            info = yf_ticker.info
+            
+            if not info or not isinstance(info, dict):
+                logger.warning(f"No key info available for {ticker}. Check connection.")
+                return StockData(
+                    ticker=ticker, name=ticker, industry="Unknown",
+                    roic=0.0, debt_to_equity=999.0, fcf_yield=0.0, current_pe=0.0, pe_5yr_avg=20.0,
+                    is_too_hard=True, error_message="Ticker info not available"
+                )
+
+            name = info.get("longName") or info.get("shortName") or ticker
+            industry = info.get("industry") or "Unknown"
+            current_price = info.get("currentPrice") or info.get("previousClose") or 0.0
+            
+            # Try to get latest price from history if info is missing it
+            if current_price == 0.0:
+                hist = yf_ticker.history(period="5d")
+                if not hist.empty:
+                    current_price = float(hist["Close"].iloc[-1])
+            
+            currency = info.get("currency") or "USD"
+            current_pe = info.get("trailingPE") or 0.0
+            pe_5yr_avg = info.get("fiveYearAvgPE") or 0.0
+            
+            # Fetch annual statements
+            balance_sheet = yf_ticker.balance_sheet
+            cashflow = yf_ticker.cashflow
+            income_stmt = yf_ticker.income_stmt
+            
+            # 1. NOPAT Calculation
+            ebit = self.safe_get_row(income_stmt, ['EBIT', 'OperatingIncome', 'Operating Income'])
+            tax_provision = self.safe_get_row(income_stmt, ['TaxProvision', 'Tax Provision', 'IncomeTaxExpense'])
+            pretax_income = self.safe_get_row(income_stmt, ['PretaxIncome', 'Pre-Tax Income', 'Pretax Income'])
+            
+            effective_tax_rate = 0.21
+            if pretax_income > 0 and tax_provision > 0:
+                effective_tax_rate = tax_provision / pretax_income
+                if effective_tax_rate < 0 or effective_tax_rate > 0.8:
+                    effective_tax_rate = 0.21
+                    
+            nopat = ebit * (1 - effective_tax_rate)
+            
+            # 2. Invested Capital Calculation
+            equity = self.safe_get_row(balance_sheet, ['StockholdersEquity', 'TotalStockholdersEquity', 'Stockholders Equity', 'Total Stockholders Equity'])
+            debt = self.safe_get_row(balance_sheet, ['TotalDebt', 'Total Debt'])
+            if debt == 0.0:
+                lt_debt = self.safe_get_row(balance_sheet, ['LongTermDebt', 'Long Term Debt'])
+                st_debt = self.safe_get_row(balance_sheet, ['ShortLongTermDebt', 'Short Long Term Debt'])
+                debt = lt_debt + st_debt
+                
+            cash = self.safe_get_row(balance_sheet, ['CashAndCashEquivalents', 'Cash And Cash Equivalents', 'Cash'])
+            
+            invested_capital = equity + debt - cash
+            roic = (nopat / invested_capital) if invested_capital > 0 else 0.0
+            
+            # 3. Debt to Equity
+            debt_to_equity = (debt / equity) if equity > 0 else (999.0 if debt > 0 else 0.0)
+            
+            # 4. FCF Yield
+            fcf = self.safe_get_row(cashflow, ['FreeCashFlow', 'Free Cash Flow'])
+            if fcf == 0.0:
+                # fallback to operating cash flow + capital expenditure
+                ocf = self.safe_get_row(cashflow, ['OperatingCashFlow', 'Cash Flow From Operating Activities', 'Operating Cash Flow'])
+                capex = self.safe_get_row(cashflow, ['CapitalExpenditure', 'Capital Expenditure'])
+                fcf = ocf + capex
+                
+            market_cap = info.get('marketCap') or 0.0
+            fcf_yield = (fcf / market_cap) if market_cap > 0 else 0.0
+            
+            # Fallback for current P/E if not in info
+            if current_pe == 0.0 and current_price > 0:
+                eps = info.get('trailingEps') or 0.0
+                if eps > 0:
+                    current_pe = current_price / eps
+                    
+            if not pe_5yr_avg:
+                pe_5yr_avg = current_pe or 20.0
+                
+            # 5. 10-Year Discounted Cash Flow (DCF) intrinsic value model
+            fcf_history = []
+            if cashflow is not None and not cashflow.empty:
+                fcf_key = next((k for k in ['Free Cash Flow', 'FreeCashFlow'] if k in cashflow.index), None)
+                if fcf_key:
+                    fcf_history = list(cashflow.loc[fcf_key])
+                else:
+                    ocf_key = next((k for k in ['Operating Cash Flow', 'OperatingCashFlow'] if k in cashflow.index), None)
+                    capex_key = next((k for k in ['Capital Expenditure', 'CapitalExpenditure'] if k in cashflow.index), None)
+                    if ocf_key and capex_key:
+                        ocf_list = list(cashflow.loc[ocf_key])
+                        capex_list = list(cashflow.loc[capex_key])
+                        fcf_history = [float(o) + float(c) for o, c in zip(ocf_list, capex_list)]
+                    
+            # Clean history
+            fcf_history = [float(f) for f in fcf_history if f == f and f is not None]
+            
+            # If FCF is negative or missing, it's classified as "Too Hard"
+            if not fcf_history or fcf_history[0] <= 0 or current_price <= 0:
+                intrinsic_value = 0.0
+                is_too_hard = True
+                error_msg = "Erratic or negative FCF: Too Hard to value reliably" if fcf_history else "No FCF data available"
+            else:
+                is_too_hard = False
+                error_msg = ""
+                
+                # Dynamic growth rate calculation
+                growth_rate = 0.08  # standard 8% conservative growth
+                if len(fcf_history) >= 2:
+                    # Clean newest to oldest
+                    hist = fcf_history[::-1]
+                    if hist[0] > 0 and hist[-1] > 0:
+                        n_years = len(hist) - 1
+                        cagr = (hist[-1] / hist[0]) ** (1 / n_years) - 1
+                        if 0 < cagr < 0.20:
+                            growth_rate = cagr
+                        elif cagr >= 0.20:
+                            growth_rate = 0.15  # cap growth at 15% to be conservative
+                
+                discount_rate = 0.10  # 10% Buffett discount rate
+                terminal_growth = 0.02  # 2% terminal growth rate
+                
+                # Projections
+                projected_fcfs = []
+                temp_fcf = fcf_history[0]
+                for year in range(1, 11):
+                    if year <= 5:
+                        temp_fcf = temp_fcf * (1 + growth_rate)
+                    else:
+                        fade_growth = growth_rate - (growth_rate - terminal_growth) * ((year - 5) / 5)
+                        temp_fcf = temp_fcf * (1 + fade_growth)
+                    projected_fcfs.append(temp_fcf)
+                
+                # Discount cash flows
+                discounted_value = 0.0
+                for year, f_proj in enumerate(projected_fcfs, 1):
+                    discounted_value += f_proj / ((1 + discount_rate) ** year)
+                    
+                # Terminal value
+                terminal_value = (projected_fcfs[-1] * (1 + terminal_growth)) / (discount_rate - terminal_growth)
+                discounted_terminal_value = terminal_value / ((1 + discount_rate) ** 10)
+                
+                # Intrinsic value
+                total_intrinsic = discounted_value + discounted_terminal_value
+                shares = info.get('sharesOutstanding') or 0.0
+                intrinsic_value = (total_intrinsic / shares) if shares > 0 else 0.0
+                
+            # Valuation Price Intervals
+            bargain_price = intrinsic_value * 0.70
+            fair_price = intrinsic_value
+            expensive_price = intrinsic_value * 1.20
+            
+            return StockData(
+                ticker=ticker,
+                name=name,
+                industry=industry,
+                roic=roic,
+                debt_to_equity=debt_to_equity,
+                fcf_yield=fcf_yield,
+                current_pe=current_pe,
+                pe_5yr_avg=pe_5yr_avg,
+                intrinsic_value=intrinsic_value,
+                bargain_price=bargain_price,
+                fair_price=fair_price,
+                expensive_price=expensive_price,
+                current_price=current_price,
+                currency=currency,
+                is_too_hard=is_too_hard,
+                error_message=error_msg
+            )
+            
+        except Exception as e:
+            logger.error(f"Error fetching data for ticker {ticker}: {e}")
+            return StockData(
+                ticker=ticker, name=ticker, industry="Unknown",
+                roic=0.0, debt_to_equity=999.0, fcf_yield=0.0, current_pe=0.0, pe_5yr_avg=20.0,
+                is_too_hard=True, error_message=str(e)
+            )
+
+if __name__ == "__main__":
+    fetcher = YFinanceFetcher()
+    data = fetcher.fetch_data("AAPL")
+    print(data)

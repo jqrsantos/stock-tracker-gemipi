@@ -6,6 +6,8 @@ RUN apt-get update && apt-get install -y curl && \
     curl -fsSL https://antigravity.google/cli/install.sh | bash && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
+ENV PATH="/root/.local/bin:${PATH}"
+
 COPY --from=uv /uv /usr/bin/uv
 WORKDIR /app
 ENV UV_COMPILE_BYTECODE=1

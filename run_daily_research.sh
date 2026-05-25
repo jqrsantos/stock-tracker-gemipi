@@ -4,6 +4,9 @@
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
+# Ensure local bin directories are in PATH, especially when run via cron
+export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"
+
 # 1. Fetch current unique tickers from the API
 # Use full paths for cron reliability
 CURL_BIN=$(command -v curl || echo "/usr/bin/curl")

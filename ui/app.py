@@ -174,14 +174,14 @@ with col_a:
             col3, col4, col5 = st.columns(3)
             if action == "DIVIDEND":
                 qty = col3.number_input("Shares Owned", min_value=0.0, value=1.0, format="%.4f")
-                price = col4.number_input(f"Dividend ({currency})", min_value=0.0, format="%.2f")
+                price = col4.number_input("Dividend", min_value=0.0, format="%.2f")
             elif action in ["DEPOSIT", "WITHDRAWAL"]:
                 qty = 1.0
-                price = col4.number_input(f"Amount ({currency})", min_value=0.0, format="%.2f")
+                price = col4.number_input("Amount", min_value=0.0, format="%.2f")
                 ticker_input = "CASH"
             else:
                 qty = col3.number_input("Quantity", min_value=0.0, format="%.4f")
-                price = col4.number_input(f"Price ({currency})", min_value=0.0, format="%.2f")
+                price = col4.number_input("Price (Native)", min_value=0.0, format="%.2f")
             tx_date = col5.date_input("Date", value=pd.Timestamp.now().date())
             submitted = st.form_submit_button("Submit Transaction")
             if submitted:
@@ -214,6 +214,10 @@ with col_b:
                 # Check for required columns
                 required = {'ticker', 'action', 'quantity', 'price'}
                 if required.issubset(batch_df.columns.str.lower()):
+                    batch_default_currency = st.selectbox(
+                        "Default Currency (if not specified in CSV)", 
+                        ["Stock's Native Currency", "EUR", "USD", "GBP", "GBp"]
+                    )
                     if st.button("Confirm Batch Upload"):
                         # Normalize columns
                         batch_df.columns = batch_df.columns.str.lower()
@@ -236,6 +240,10 @@ with col_b:
                                 val = str(row['currency']).strip().upper()
                                 if val:
                                     currency_val = val
+                            
+                            if not currency_val:
+                                if batch_default_currency != "Stock's Native Currency":
+                                    currency_val = batch_default_currency
                             
                             # Parse quantity and price defensively
                             qty_val = 0.0

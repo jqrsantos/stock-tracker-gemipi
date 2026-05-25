@@ -11,7 +11,10 @@ def sanitize_float(val):
     if val < -1.0: return -1.0
     return val
 
-def calculate_portfolio_performance(transactions, current_prices):
+def calculate_portfolio_performance(transactions, current_prices, current_prices_native=None):
+    if current_prices_native is None:
+        current_prices_native = {}
+        
     if not transactions:
         return {
             "xirr": 0.0, "cagr": 0.0, "total_contributed": 0.0, 
@@ -63,7 +66,14 @@ def calculate_portfolio_performance(transactions, current_prices):
         elif tx.action == "BUY":
             cash_balance -= val
             if t not in holdings: holdings[t] = []
-            holdings[t].append({"qty": qty, "price": price})
+            native_price = Decimal(str(getattr(tx, "native_price", price))).quantize(Decimal('1.00000000'))
+            native_currency = getattr(tx, "native_currency", "EUR")
+            holdings[t].append({
+                "qty": qty, 
+                "price": price, 
+                "native_price": native_price, 
+                "native_currency": native_currency
+            })
             
         elif tx.action == "SELL":
             cash_balance += val
@@ -123,12 +133,22 @@ def calculate_portfolio_performance(transactions, current_prices):
             stock_value += market_val_eur
             avg_buy_eur = sum(lot["qty"] * lot["price"] for lot in lots) / qty_owned
             ret_pct = (cur_price_eur / avg_buy_eur - 1) * 100
-            is_usd = "." not in t
-            native_symbol = "$" if is_usd else "€"
+            
+            # Retrieve native details from the lots
+            native_currency = lots[0].get("native_currency", "EUR")
+            avg_buy_native = sum(lot["qty"] * lot.get("native_price", lot["price"]) for lot in lots) / qty_owned
+            cur_price_native = Decimal(str(current_prices_native.get(t) or lots[-1].get("native_price", lots[-1]["price"])))
+            
             open_positions.append({
-                "ticker": t, "quantity": float(qty_owned), "avg_price": float(avg_buy_eur),
-                "current_price": float(cur_price_eur), "market_value": float(market_val_eur), 
-                "return_pct": float(ret_pct), "native_symbol": native_symbol
+                "ticker": t, 
+                "quantity": float(qty_owned), 
+                "avg_price": float(avg_buy_eur),
+                "avg_price_native": float(avg_buy_native),
+                "current_price": float(cur_price_eur), 
+                "current_price_native": float(cur_price_native),
+                "market_value": float(market_val_eur), 
+                "return_pct": float(ret_pct), 
+                "native_currency": native_currency
             })
             
     total_portfolio_value = cash_balance + stock_value

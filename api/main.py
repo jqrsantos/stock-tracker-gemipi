@@ -21,17 +21,17 @@ logger = logging.getLogger(__name__)
 class TransactionCreate(BaseModel):
     ticker: str
     action: str
-    quantity: float
-    price: float
-    currency: str = "EUR"
+    quantity: Decimal
+    price: Decimal
+    currency: Optional[str] = None
     timestamp: Optional[datetime] = None
 
 class TransactionResponse(BaseModel):
     id: int
     ticker: str
     action: str
-    quantity: float
-    price: float
+    quantity: Decimal
+    price: Decimal
     currency: str
     timestamp: datetime
 
@@ -42,11 +42,11 @@ class BargainCreate(BaseModel):
     ticker: str
     name: str
     industry: str
-    current_price: float
+    current_price: Decimal
     currency: str = "USD"
-    bargain_price: float
-    fair_price: float
-    expensive_price: float
+    bargain_price: Decimal
+    fair_price: Decimal
+    expensive_price: Decimal
     rationale: str
 
 class BargainResponse(BaseModel):
@@ -54,11 +54,11 @@ class BargainResponse(BaseModel):
     ticker: str
     name: str
     industry: str
-    current_price: float
+    current_price: Decimal
     currency: str
-    bargain_price: float
-    fair_price: float
-    expensive_price: float
+    bargain_price: Decimal
+    fair_price: Decimal
+    expensive_price: Decimal
     rationale: str
     timestamp: datetime
 
@@ -121,16 +121,31 @@ def get_price(ticker: str):
         logger.error(f"Error fetching price for {ticker}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
+def get_native_currency(ticker: str) -> str:
+    if ticker.upper() == "CASH":
+        return "EUR"
+    try:
+        price, currency = fetch_stock_info(ticker)
+        if currency:
+            return currency.upper()
+    except Exception as e:
+        logger.warning(f"Failed to fetch stock info for auto-currency lookup on {ticker}: {e}")
+    return "EUR"
+
 @app.post("/transactions/", response_model=TransactionResponse)
 def add_transaction(transaction: TransactionCreate, db: Session = Depends(get_db)):
     try:
+        tx_currency = transaction.currency
+        if not tx_currency or tx_currency.strip() == "":
+            tx_currency = get_native_currency(transaction.ticker)
+            
         # Convert Pydantic model to SQLAlchemy model
         db_tx = models.Transaction(
             ticker=transaction.ticker,
             action=transaction.action,
             quantity=transaction.quantity,
             price=transaction.price,
-            currency=transaction.currency,
+            currency=tx_currency,
             timestamp=transaction.timestamp if transaction.timestamp else datetime.utcnow()
         )
         db.add(db_tx)
@@ -148,12 +163,16 @@ def add_transactions_batch(transactions: List[TransactionCreate], db: Session = 
     try:
         db_txs = []
         for tx in transactions:
+            tx_currency = tx.currency
+            if not tx_currency or tx_currency.strip() == "":
+                tx_currency = get_native_currency(tx.ticker)
+                
             db_tx = models.Transaction(
                 ticker=tx.ticker,
                 action=tx.action,
                 quantity=tx.quantity,
                 price=tx.price,
-                currency=tx.currency,
+                currency=tx_currency,
                 timestamp=tx.timestamp if tx.timestamp else datetime.utcnow()
             )
             db.add(db_tx)
@@ -224,13 +243,15 @@ def get_metrics(db: Session = Depends(get_db)):
     exchange_rates_cache = {}
 
     class MockTx:
-        def __init__(self, t, a, q, p, ts, id):
+        def __init__(self, t, a, q, p, ts, id, native_currency, native_price):
             self.ticker = t
             self.action = a
             self.quantity = q
             self.price = Decimal(str(p))
             self.timestamp = ts
             self.id = id
+            self.native_currency = native_currency
+            self.native_price = Decimal(str(native_price))
 
     def get_cached_rate(from_curr, to_curr, dt):
         if from_curr == to_curr: return 1.0
@@ -243,18 +264,20 @@ def get_metrics(db: Session = Depends(get_db)):
     for tx in transactions:
         rate = get_cached_rate(tx.currency, "EUR", tx.timestamp)
         eur_price = float(tx.price) * rate
-        eur_transactions.append(MockTx(tx.ticker, tx.action, tx.quantity, eur_price, tx.timestamp, tx.id))
+        eur_transactions.append(MockTx(tx.ticker, tx.action, tx.quantity, eur_price, tx.timestamp, tx.id, tx.currency, tx.price))
         
     # Only fetch current prices for stocks with an open position
     open_positions = metrics.get_open_positions(eur_transactions)
     open_tickers = list(open_positions.keys())
     
     current_prices = {}
+    current_prices_native = {}
     for t in open_tickers:
         try:
             raw_price, currency = fetch_stock_info(t)
             if raw_price is None: continue
             
+            current_prices_native[t] = raw_price
             # Use current rate for current price
             rate = get_cached_rate(currency, "EUR", None)
             current_prices[t] = raw_price * rate
@@ -262,7 +285,7 @@ def get_metrics(db: Session = Depends(get_db)):
             pass
             
     usd_eur_rate = get_cached_rate("USD", "EUR", None)
-    data = metrics.calculate_portfolio_performance(eur_transactions, current_prices)
+    data = metrics.calculate_portfolio_performance(eur_transactions, current_prices, current_prices_native)
     data["usd_eur_rate"] = usd_eur_rate
     return data
 

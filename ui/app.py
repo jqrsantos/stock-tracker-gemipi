@@ -92,11 +92,22 @@ try:
             if m.get('open_positions'):
                 pos_df = pd.DataFrame(m['open_positions'])
                 
-                # We calculate the native price for display
-                # native_price = cur_price_eur / fx_rate (if native is USD)
-                pos_df['native_price'] = pos_df.apply(
-                    lambda x: x['current_price'] / fx_rate if x['native_symbol'] == "$" else x['current_price'], axis=1
-                )
+                # Format native currency price columns with their correct prefix/suffix symbols dynamically per row
+                def format_native_price(row, val_col):
+                    currency = row.get("native_currency", "EUR")
+                    val = row[val_col]
+                    if currency == "USD":
+                        return f"${val:,.2f}"
+                    elif currency == "EUR":
+                        return f"€{val:,.2f}"
+                    elif currency == "GBP":
+                        return f"£{val:,.2f}"
+                    elif currency == "GBp":
+                        return f"{val:,.2f}p"
+                    return f"{val:,.2f} {currency}"
+                
+                pos_df['avg_price_native_str'] = pos_df.apply(lambda r: format_native_price(r, 'avg_price_native'), axis=1)
+                pos_df['current_price_native_str'] = pos_df.apply(lambda r: format_native_price(r, 'current_price_native'), axis=1)
                 
                 st.dataframe(
                     pos_df,
@@ -105,7 +116,9 @@ try:
                         "ticker": "Ticker",
                         "quantity": st.column_config.NumberColumn("Shares", format="%.4f"),
                         "avg_price": st.column_config.NumberColumn("Avg Buy (EUR)", format="€ %.2f"),
-                        "native_price": st.column_config.NumberColumn("Market Price (Native)", format="$ %.2f"),
+                        "avg_price_native_str": "Avg Buy (Native)",
+                        "current_price": st.column_config.NumberColumn("Current Price (EUR)", format="€ %.2f"),
+                        "current_price_native_str": "Current Price (Native)",
                         "market_value": st.column_config.NumberColumn("Market Value (EUR)", format="€ %.2f"),
                         "return_pct": st.column_config.NumberColumn("Return %", format="%.2f%%"),
                     },
@@ -206,17 +219,45 @@ with col_b:
                         batch_df.columns = batch_df.columns.str.lower()
                         batch_txs = []
                         for _, row in batch_df.iterrows():
-                            # Handle date
+                            # Handle date defensively to avoid NaT/NaN JSON serialization crashes
                             ts = None
-                            if 'date' in row: ts = pd.to_datetime(row['date']).isoformat()
-                            elif 'timestamp' in row: ts = pd.to_datetime(row['timestamp']).isoformat()
+                            if 'date' in row and not pd.isna(row['date']):
+                                val = pd.to_datetime(row['date'])
+                                if not pd.isna(val):
+                                    ts = val.isoformat()
+                            elif 'timestamp' in row and not pd.isna(row['timestamp']):
+                                val = pd.to_datetime(row['timestamp'])
+                                if not pd.isna(val):
+                                    ts = val.isoformat()
+                            
+                            # Handle currency dynamically - let backend auto-detect native currency if missing or empty
+                            currency_val = None
+                            if 'currency' in row and not pd.isna(row['currency']):
+                                val = str(row['currency']).strip().upper()
+                                if val:
+                                    currency_val = val
+                            
+                            # Parse quantity and price defensively
+                            qty_val = 0.0
+                            if 'quantity' in row and not pd.isna(row['quantity']):
+                                try:
+                                    qty_val = float(row['quantity'])
+                                except:
+                                    pass
+                                    
+                            price_val = 0.0
+                            if 'price' in row and not pd.isna(row['price']):
+                                try:
+                                    price_val = float(row['price'])
+                                except:
+                                    pass
                             
                             batch_txs.append({
-                                "ticker": str(row['ticker']).upper(),
-                                "action": str(row['action']).upper(),
-                                "quantity": float(row['quantity']),
-                                "price": float(row['price']),
-                                "currency": str(row['currency']).upper() if 'currency' in row else "EUR",
+                                "ticker": str(row['ticker']).upper().strip(),
+                                "action": str(row['action']).upper().strip(),
+                                "quantity": qty_val,
+                                "price": price_val,
+                                "currency": currency_val,
                                 "timestamp": ts
                             })
                         

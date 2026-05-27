@@ -113,7 +113,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             output = result.stdout
             parts = output.split("--- FULL REPORT ---")
             
-            summary = parts[0].replace("--- TELEGRAM SUMMARY ---", "").strip()
+            # Extract only the summary inside the --- TELEGRAM SUMMARY --- block, ignoring model preambles/verbosity
+            if "--- TELEGRAM SUMMARY ---" in output:
+                summary_part = output.split("--- TELEGRAM SUMMARY ---")[1]
+                summary = summary_part.split("--- FULL REPORT ---")[0].strip()
+            else:
+                summary = parts[0].replace("--- TELEGRAM SUMMARY ---", "").strip()
+                
             full_report = parts[1].strip() if len(parts) > 1 else output
             
             await update.message.reply_text(summary[:4000])

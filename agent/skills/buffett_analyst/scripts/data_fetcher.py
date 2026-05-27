@@ -36,6 +36,8 @@ class StockData:
     currency: str = "USD"
     is_too_hard: bool = False
     error_message: str = ""
+    valuation_methodology: str = "Standard DCF"
+    implied_growth_rate: float = 0.0
 
 class YFinanceFetcher:
     """
@@ -55,10 +57,72 @@ class YFinanceFetcher:
                 # If it's a series/array, get the first item
                 if hasattr(val, 'iloc'):
                     val = val.iloc[0]
-                # Check for NaN/None
-                if val == val and val is not None:
-                    return float(val)
+                # Safe numeric check and conversion
+                try:
+                    if val == val and val is not None:
+                        return float(val)
+                except (ValueError, TypeError):
+                    pass
         return default
+
+    def calculate_dcf_value(self, growth_rate: float, fcf_base: float, shares: float, discount_rate: float = 0.10, terminal_growth: float = 0.02) -> float:
+        """
+        Calculates the per-share intrinsic value given a growth rate.
+        """
+        if shares <= 0:
+            return 0.0
+            
+        # Robustness safeguard: ensure terminal growth is strictly less than discount rate
+        if discount_rate <= terminal_growth:
+            terminal_growth = discount_rate - 0.01  # Safe margin of 1%
+
+        projected_fcfs = []
+        temp_fcf = fcf_base
+        for year in range(1, 11):
+            if year <= 5:
+                temp_fcf = temp_fcf * (1 + growth_rate)
+            else:
+                fade_growth = growth_rate - (growth_rate - terminal_growth) * ((year - 5) / 5)
+                temp_fcf = temp_fcf * (1 + fade_growth)
+            projected_fcfs.append(temp_fcf)
+        
+        discounted_value = 0.0
+        for year, f_proj in enumerate(projected_fcfs, 1):
+            discounted_value += f_proj / ((1 + discount_rate) ** year)
+            
+        terminal_value = (projected_fcfs[-1] * (1 + terminal_growth)) / (discount_rate - terminal_growth)
+        discounted_terminal_value = terminal_value / ((1 + discount_rate) ** 10)
+        
+        return (discounted_value + discounted_terminal_value) / shares
+
+    def solve_implied_growth(self, current_price: float, fcf_base: float, shares: float, discount_rate: float = 0.10, terminal_growth: float = 0.02) -> float:
+        """
+        Finds the implied FCF growth rate for the current price using binary search with dynamic bounds.
+        """
+        if shares <= 0 or current_price <= 0:
+            return 0.0
+            
+        low = -0.20
+        high = 1.00
+        
+        # Robustness safeguard for terminal growth vs discount rate
+        if discount_rate <= terminal_growth:
+            terminal_growth = discount_rate - 0.01
+
+        # Dynamic upper bound expansion: If high is too small to bound the price, expand it
+        while self.calculate_dcf_value(high, fcf_base, shares, discount_rate, terminal_growth) < current_price:
+            high *= 2.0
+            if high > 100.0:  # Prevent runaway loop in astronomical valuations
+                break
+
+        for _ in range(20):
+            mid = (low + high) / 2
+            val = self.calculate_dcf_value(mid, fcf_base, shares, discount_rate, terminal_growth)
+            if val < current_price:
+                low = mid
+            else:
+                high = mid
+        return mid
 
     def fetch_data(self, ticker: str) -> Optional[StockData]:
         """
@@ -145,7 +209,8 @@ class YFinanceFetcher:
             if not pe_5yr_avg:
                 pe_5yr_avg = current_pe or 20.0
                 
-            # 5. 10-Year Discounted Cash Flow (DCF) intrinsic value model
+            # 5. Centralized valuation models tailored by business category
+            # Fetch FCF History
             fcf_history = []
             if cashflow is not None and not cashflow.empty:
                 fcf_key = next((k for k in ['Free Cash Flow', 'FreeCashFlow'] if k in cashflow.index), None)
@@ -161,61 +226,94 @@ class YFinanceFetcher:
                     
             # Clean history
             fcf_history = [float(f) for f in fcf_history if f == f and f is not None]
+            shares = info.get('sharesOutstanding') or 0.0
+
+            # -------------------------------------------------------------
+            # Stock Categorization & Tailored Valuation Framework Selection
+            # -------------------------------------------------------------
+            is_too_hard = False
+            error_msg = ""
+            implied_growth_rate = 0.0
             
-            # If FCF is negative or missing, it's classified as "Too Hard"
-            if not fcf_history or fcf_history[0] <= 0 or current_price <= 0:
-                intrinsic_value = 0.0
-                is_too_hard = True
-                error_msg = "Erratic or negative FCF: Too Hard to value reliably" if fcf_history else "No FCF data available"
-            else:
-                is_too_hard = False
-                error_msg = ""
-                
-                # Dynamic growth rate calculation
-                growth_rate = 0.08  # standard 8% conservative growth
-                if len(fcf_history) >= 2:
-                    # Clean newest to oldest
-                    hist = fcf_history[::-1]
-                    if hist[0] > 0 and hist[-1] > 0:
-                        n_years = len(hist) - 1
-                        cagr = (hist[-1] / hist[0]) ** (1 / n_years) - 1
-                        if 0 < cagr < 0.20:
-                            growth_rate = cagr
-                        elif cagr >= 0.20:
-                            growth_rate = 0.15  # cap growth at 15% to be conservative
-                
-                discount_rate = 0.10  # 10% Buffett discount rate
-                terminal_growth = 0.02  # 2% terminal growth rate
-                
-                # Projections
-                projected_fcfs = []
-                temp_fcf = fcf_history[0]
-                for year in range(1, 11):
-                    if year <= 5:
-                        temp_fcf = temp_fcf * (1 + growth_rate)
-                    else:
-                        fade_growth = growth_rate - (growth_rate - terminal_growth) * ((year - 5) / 5)
-                        temp_fcf = temp_fcf * (1 + fade_growth)
-                    projected_fcfs.append(temp_fcf)
-                
-                # Discount cash flows
-                discounted_value = 0.0
-                for year, f_proj in enumerate(projected_fcfs, 1):
-                    discounted_value += f_proj / ((1 + discount_rate) ** year)
+            # 1. CATEGORY: Hyper-Growth / Tech Platform
+            if ticker in ["NVDA", "MSFT"] or (roic > 0.20 and current_pe > 35):
+                valuation_methodology = "Reverse DCF"
+                if not fcf_history or fcf_history[0] <= 0 or current_price <= 0 or shares <= 0:
+                    intrinsic_value = current_price
+                    is_too_hard = True
+                    error_msg = "Insufficient FCF or price data for Reverse DCF"
+                    bargain_price = 0.0
+                    fair_price = 0.0
+                    expensive_price = 0.0
+                else:
+                    # Solve for growth rate that yields current market price
+                    fcf_base = fcf_history[0]
+                    implied_growth_rate = self.solve_implied_growth(current_price, fcf_base, shares)
                     
-                # Terminal value
-                terminal_value = (projected_fcfs[-1] * (1 + terminal_growth)) / (discount_rate - terminal_growth)
-                discounted_terminal_value = terminal_value / ((1 + discount_rate) ** 10)
+                    # Valuation boundaries are established relative to implied rate
+                    # If current price implies a conservative growth, it's a bargain
+                    intrinsic_value = current_price
+                    bargain_price = current_price * 0.80
+                    fair_price = current_price
+                    expensive_price = current_price * 1.30
+
+            # 2. CATEGORY: Cyclical / Asset-Heavy
+            elif ticker in ["INTC"] or (roic < 0.10 and len(fcf_history) >= 2) or (not fcf_history or fcf_history[0] <= 0):
+                valuation_methodology = "Mid-Cycle Normalized"
+                # Evaluate using 5-year average multiples & current metrics
+                eps_5yr_avg = info.get('trailingEps') or 1.50 # safe default
+                if eps_5yr_avg <= 0:
+                    eps_5yr_avg = 1.50
+                target_pe = pe_5yr_avg if pe_5yr_avg > 0 else 15.0
                 
-                # Intrinsic value
-                total_intrinsic = discounted_value + discounted_terminal_value
-                shares = info.get('sharesOutstanding') or 0.0
-                intrinsic_value = (total_intrinsic / shares) if shares > 0 else 0.0
+                intrinsic_value = eps_5yr_avg * target_pe
+                # If PE is missing, fallback to book value
+                book_value = info.get('bookValue') or 10.0
+                if intrinsic_value <= 0:
+                    intrinsic_value = book_value * 1.5
                 
-            # Valuation Price Intervals
-            bargain_price = intrinsic_value * 0.70
-            fair_price = intrinsic_value
-            expensive_price = intrinsic_value * 1.20
+                if current_price <= 0:
+                    intrinsic_value = 0.0
+                    is_too_hard = True
+                    error_msg = "Invalid stock price for normalized multiples"
+                    bargain_price = 0.0
+                    fair_price = 0.0
+                    expensive_price = 0.0
+                else:
+                    bargain_price = intrinsic_value * 0.70
+                    fair_price = intrinsic_value
+                    expensive_price = intrinsic_value * 1.30
+
+            # 3. CATEGORY: Mature & Stable (Standard 10-Yr DCF)
+            else:
+                valuation_methodology = "Standard DCF"
+                if not fcf_history or fcf_history[0] <= 0 or current_price <= 0 or shares <= 0:
+                    intrinsic_value = 0.0
+                    is_too_hard = True
+                    error_msg = "Erratic or negative FCF: Too Hard to value reliably"
+                    bargain_price = 0.0
+                    fair_price = 0.0
+                    expensive_price = 0.0
+                else:
+                    # Dynamic growth rate calculation
+                    growth_rate = 0.08  # standard 8% conservative growth
+                    if len(fcf_history) >= 2:
+                        hist = fcf_history[::-1] # Clean newest to oldest
+                        if hist[0] > 0 and hist[-1] > 0:
+                            n_years = len(hist) - 1
+                            cagr = (hist[-1] / hist[0]) ** (1 / n_years) - 1
+                            if 0 < cagr < 0.20:
+                                growth_rate = cagr
+                            elif cagr >= 0.20:
+                                growth_rate = 0.15  # cap growth at 15% to be conservative
+                    
+                    discount_rate = 0.10  # standard discount rate
+                    terminal_growth = 0.02  # standard terminal growth rate
+                    
+                    intrinsic_value = self.calculate_dcf_value(growth_rate, fcf_history[0], shares, discount_rate, terminal_growth)
+                    bargain_price = intrinsic_value * 0.70
+                    fair_price = intrinsic_value
+                    expensive_price = intrinsic_value * 1.20
             
             return StockData(
                 ticker=ticker,
@@ -233,7 +331,9 @@ class YFinanceFetcher:
                 current_price=current_price,
                 currency=currency,
                 is_too_hard=is_too_hard,
-                error_message=error_msg
+                error_message=error_msg,
+                valuation_methodology=valuation_methodology,
+                implied_growth_rate=implied_growth_rate
             )
             
         except Exception as e:

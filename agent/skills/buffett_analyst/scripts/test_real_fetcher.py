@@ -46,5 +46,32 @@ class TestYFinanceFetcher(unittest.TestCase):
         self.assertTrue(data.is_too_hard)
         self.assertEqual(data.intrinsic_value, 0.0)
 
+    def test_fetch_nvda_hypergrowth(self):
+        """
+        Verify that NVDA is categorized as Reverse DCF and yields valid boundaries.
+        """
+        data = self.fetcher.fetch_data("NVDA")
+        self.assertIsNotNone(data)
+        self.assertEqual(data.ticker, "NVDA")
+        self.assertEqual(data.valuation_methodology, "Reverse DCF")
+        self.assertGreater(data.implied_growth_rate, 0.0)
+        self.assertGreater(data.intrinsic_value, 0.0)
+        self.assertGreater(data.bargain_price, 0.0)
+        self.assertGreater(data.fair_price, 0.0)
+        self.assertGreater(data.expensive_price, 0.0)
+
+    def test_fetch_intc_cyclical(self):
+        """
+        Verify that INTC (cyclical/low ROIC) is evaluated using Mid-Cycle Normalized Multiple.
+        """
+        data = self.fetcher.fetch_data("INTC")
+        self.assertIsNotNone(data)
+        self.assertEqual(data.ticker, "INTC")
+        self.assertEqual(data.valuation_methodology, "Mid-Cycle Normalized")
+        self.assertGreater(data.intrinsic_value, 0.0)
+        self.assertGreater(data.bargain_price, 0.0)
+        self.assertGreater(data.fair_price, 0.0)
+        self.assertGreater(data.expensive_price, 0.0)
+
 if __name__ == "__main__":
     unittest.main()

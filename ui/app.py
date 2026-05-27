@@ -57,7 +57,7 @@ try:
         if m.get('invested_series'):
             st.write("### 📈 Portfolio Evolution (EUR)")
             hist_df = pd.DataFrame(m['invested_series'])
-            hist_df['date'] = pd.to_datetime(hist_df['date'])
+            hist_df['date'] = pd.to_datetime(hist_df['date'], format='ISO8601')
             
             fig = go.Figure()
             fig.add_trace(go.Scatter(
@@ -226,11 +226,11 @@ with col_b:
                             # Handle date defensively to avoid NaT/NaN JSON serialization crashes
                             ts = None
                             if 'date' in row and not pd.isna(row['date']):
-                                val = pd.to_datetime(row['date'])
+                                val = pd.to_datetime(row['date'], format='mixed')
                                 if not pd.isna(val):
                                     ts = val.isoformat()
                             elif 'timestamp' in row and not pd.isna(row['timestamp']):
-                                val = pd.to_datetime(row['timestamp'])
+                                val = pd.to_datetime(row['timestamp'], format='mixed')
                                 if not pd.isna(val):
                                     ts = val.isoformat()
                             
@@ -288,7 +288,7 @@ try:
     if tx_res.status_code == 200:
         df = pd.DataFrame(tx_res.json())
         if not df.empty:
-            df['timestamp'] = pd.to_datetime(df['timestamp'])
+            df['timestamp'] = pd.to_datetime(df['timestamp'], format='ISO8601')
             df = df.sort_values(by='timestamp', ascending=False)
             df['date'] = df['timestamp'].dt.date
             

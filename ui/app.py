@@ -204,12 +204,15 @@ with col_a:
                         "currency": currency,
                         "timestamp": tx_date.isoformat()
                     }
-                    res = requests.post(f"{API_URL}/transactions/", json=payload)
-                    if res.status_code == 200:
-                        st.toast(f"✅ Recorded {action}!", icon="💰")
-                        st.rerun()
-                    else:
-                        st.error(f"Failed to record transaction: {res.text}")
+                    try:
+                        res = requests.post(f"{API_URL}/transactions/", json=payload)
+                        if res.status_code == 200:
+                            st.toast(f"✅ Recorded {action}!", icon="💰")
+                            st.rerun()
+                        else:
+                            st.error(f"Failed to record transaction: {res.text}")
+                    except Exception as e:
+                        st.error(f"Network error: Could not connect to API ({e})")
                 else:
                     st.warning("Please fill all fields with non-zero values")
 
@@ -227,7 +230,7 @@ with col_b:
                 if required.issubset(batch_df.columns.str.lower()):
                     batch_default_currency = st.selectbox(
                         "Default Currency (if not specified in CSV)", 
-                        ["Stock's Native Currency", "EUR", "USD"]
+                        ["Stock's Native (EUR/USD only, others default to EUR)", "EUR", "USD"]
                     )
                     if st.button("Confirm Batch Upload"):
                         # Normalize columns
@@ -253,7 +256,7 @@ with col_b:
                                     currency_val = val
                             
                             if not currency_val:
-                                if batch_default_currency != "Stock's Native Currency":
+                                if batch_default_currency != "Stock's Native (EUR/USD only, others default to EUR)":
                                     currency_val = batch_default_currency
                             
                             qty_val = 0.0
@@ -279,12 +282,15 @@ with col_b:
                                 "timestamp": ts
                             })
                         
-                        batch_res = requests.post(f"{API_URL}/transactions/batch", json=batch_txs)
-                        if batch_res.status_code == 200:
-                            st.success(f"Successfully uploaded {len(batch_txs)} transactions!")
-                            st.rerun()
-                        else:
-                            st.error(f"Batch upload failed: {batch_res.text}")
+                        try:
+                            batch_res = requests.post(f"{API_URL}/transactions/batch", json=batch_txs)
+                            if batch_res.status_code == 200:
+                                st.success(f"Successfully uploaded {len(batch_txs)} transactions!")
+                                st.rerun()
+                            else:
+                                st.error(f"Batch upload failed: {batch_res.text}")
+                        except Exception as e:
+                            st.error(f"Network error during batch upload: Could not connect to API ({e})")
                 else:
                     st.error(f"CSV must contain: {required}")
             except Exception as e:
@@ -309,12 +315,15 @@ try:
                                         options=df['id'].tolist(),
                                         format_func=lambda x: f"ID {x}: {df[df['id']==x]['ticker'].values[0]} {df[df['id']==x]['action'].values[0]} ({df[df['id']==x]['date'].values[0]})")
                 if st.button("Confirm Delete", type="primary"):
-                    del_res = requests.delete(f"{API_URL}/transactions/{to_delete}")
-                    if del_res.status_code == 200:
-                        st.success(f"Deleted transaction {to_delete}")
-                        st.rerun()
-                    else:
-                        st.error("Failed to delete")
+                    try:
+                        del_res = requests.delete(f"{API_URL}/transactions/{to_delete}")
+                        if del_res.status_code == 200:
+                            st.success(f"Deleted transaction {to_delete}")
+                            st.rerun()
+                        else:
+                            st.error("Failed to delete")
+                    except Exception as e:
+                        st.error(f"Network error during deletion: Could not connect to API ({e})")
 
             st.dataframe(
                 df[['id', 'date', 'ticker', 'action', 'quantity', 'price', 'currency']], 

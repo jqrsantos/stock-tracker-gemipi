@@ -165,25 +165,35 @@ col_a, col_b = st.columns(2)
 
 with col_a:
     with st.expander("➕ Record New Transaction"):
+        # Action is pulled OUT of the st.form to trigger immediate Streamlit re-run
+        action = st.selectbox("Action", ["BUY", "SELL", "DIVIDEND", "WITHDRAWAL", "DEPOSIT"])
+        
         with st.form("add_tx", clear_on_submit=True):
-            col1, col2, colc = st.columns([2, 2, 1])
-            ticker_input = col1.text_input("Ticker").upper().strip()
-            action = col2.selectbox("Action", ["BUY", "SELL", "DIVIDEND", "WITHDRAWAL", "DEPOSIT"])
-            currency = colc.selectbox("Currency", ["EUR", "USD", "GBP", "GBp"])
+            col1, colc = st.columns([3, 1])
+            currency = colc.selectbox("Currency", ["EUR", "USD"])
             
+            # Conditionally render fields based on action
+            if action in ["DEPOSIT", "WITHDRAWAL"]:
+                ticker_input = "CASH"
+                col1.info("Transaction type: CASH")
+            else:
+                ticker_input = col1.text_input("Ticker").upper().strip()
+
             col3, col4, col5 = st.columns(3)
+            
             if action == "DIVIDEND":
                 qty = col3.number_input("Shares Owned", min_value=0.0, value=1.0, format="%.4f")
                 price = col4.number_input("Dividend", min_value=0.0, format="%.2f")
             elif action in ["DEPOSIT", "WITHDRAWAL"]:
                 qty = 1.0
                 price = col4.number_input("Amount", min_value=0.0, format="%.2f")
-                ticker_input = "CASH"
             else:
                 qty = col3.number_input("Quantity", min_value=0.0, format="%.4f")
                 price = col4.number_input("Price (Native)", min_value=0.0, format="%.2f")
+                
             tx_date = col5.date_input("Date", value=pd.Timestamp.now().date())
             submitted = st.form_submit_button("Submit Transaction")
+            
             if submitted:
                 if ticker_input and qty > 0 and price > 0:
                     payload = {
@@ -200,7 +210,8 @@ with col_a:
                         st.rerun()
                     else:
                         st.error(f"Failed to record transaction: {res.text}")
-                else: st.warning("Please fill all fields")
+                else:
+                    st.warning("Please fill all fields with non-zero values")
 
 with col_b:
     with st.expander("📁 Batch Upload (CSV)"):
@@ -216,7 +227,7 @@ with col_b:
                 if required.issubset(batch_df.columns.str.lower()):
                     batch_default_currency = st.selectbox(
                         "Default Currency (if not specified in CSV)", 
-                        ["Stock's Native Currency", "EUR", "USD", "GBP", "GBp"]
+                        ["Stock's Native Currency", "EUR", "USD"]
                     )
                     if st.button("Confirm Batch Upload"):
                         # Normalize columns
@@ -234,18 +245,17 @@ with col_b:
                                 if not pd.isna(val):
                                     ts = val.isoformat()
                             
-                            # Handle currency dynamically - let backend auto-detect native currency if missing or empty
+                            # Handle currency dynamically
                             currency_val = None
                             if 'currency' in row and not pd.isna(row['currency']):
                                 val = str(row['currency']).strip().upper()
-                                if val:
+                                if val in ["EUR", "USD"]:
                                     currency_val = val
                             
                             if not currency_val:
                                 if batch_default_currency != "Stock's Native Currency":
                                     currency_val = batch_default_currency
                             
-                            # Parse quantity and price defensively
                             qty_val = 0.0
                             if 'quantity' in row and not pd.isna(row['quantity']):
                                 try:
@@ -279,6 +289,7 @@ with col_b:
                     st.error(f"CSV must contain: {required}")
             except Exception as e:
                 st.error(f"Error reading CSV: {e}")
+
 
 # History Section
 st.divider()

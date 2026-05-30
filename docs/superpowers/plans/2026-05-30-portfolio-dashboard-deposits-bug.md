@@ -18,7 +18,7 @@
 **Files:**
 - Modify: `db/stock_tracker.db`
 
-- [ ] **Step 1: Run SQLite script to delete the transaction**
+- [x] **Step 1: Run SQLite script to delete the transaction**
 
 Run:
 ```bash
@@ -30,7 +30,7 @@ Expected Output:
 Successfully deleted transaction ID 3
 ```
 
-- [ ] **Step 2: Commit database removal**
+- [x] **Step 2: Commit database removal**
 
 Run:
 ```bash

@@ -148,7 +148,7 @@ def get_native_currency(ticker: str) -> str:
 def add_transaction(transaction: TransactionCreate, db: Session = Depends(get_db)):
     try:
         tx_currency = transaction.currency
-        if not tx_currency or tx_currency.strip() == "":
+        if not tx_currency:
             tx_currency = get_native_currency(transaction.ticker)
             
         # Convert Pydantic model to SQLAlchemy model
@@ -176,7 +176,7 @@ def add_transactions_batch(transactions: List[TransactionCreate], db: Session = 
         db_txs = []
         for tx in transactions:
             tx_currency = tx.currency
-            if not tx_currency or tx_currency.strip() == "":
+            if not tx_currency:
                 tx_currency = get_native_currency(tx.ticker)
                 
             db_tx = models.Transaction(

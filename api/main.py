@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException
 from contextlib import asynccontextmanager
 from functools import lru_cache
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from datetime import datetime
 from typing import List, Optional
 from sqlalchemy.orm import Session
@@ -25,6 +25,16 @@ class TransactionCreate(BaseModel):
     price: Decimal
     currency: Optional[str] = None
     timestamp: Optional[datetime] = None
+
+    @field_validator('currency')
+    @classmethod
+    def validate_currency(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None:
+            v_upper = v.strip().upper()
+            if v_upper not in ["EUR", "USD"]:
+                raise ValueError("Currency must be EUR or USD")
+            return v_upper
+        return v
 
 class TransactionResponse(BaseModel):
     id: int
@@ -127,7 +137,9 @@ def get_native_currency(ticker: str) -> str:
     try:
         price, currency = fetch_stock_info(ticker)
         if currency:
-            return currency.upper()
+            currency_upper = currency.upper()
+            if currency_upper in ["USD", "EUR"]:
+                return currency_upper
     except Exception as e:
         logger.warning(f"Failed to fetch stock info for auto-currency lookup on {ticker}: {e}")
     return "EUR"
@@ -201,21 +213,17 @@ def delete_transaction(transaction_id: int, db: Session = Depends(get_db)):
 def get_exchange_rate(from_currency: str, to_currency: str, date_obj: Optional[datetime] = None):
     if from_currency == to_currency:
         return 1.0
-    # Handle GBp (Pence)
-    actual_from = "GBP" if from_currency == "GBp" else from_currency
-    ticker = f"{actual_from}{to_currency}=X"
+    ticker = f"{from_currency}{to_currency}=X"
     try:
         stock = yf.Ticker(ticker)
         if date_obj:
-            # Fetch historical rate
             start_date = date_obj.strftime('%Y-%m-%d')
-            # End date should be at least one day after
             end_date = (date_obj + pd.Timedelta(days=1)).strftime('%Y-%m-%d')
             hist = stock.history(start=start_date, end=end_date)
             if not hist.empty:
                 rate = float(hist['Close'].iloc[0])
                 logger.info(f"Historical rate for {ticker} on {start_date}: {rate}")
-                return rate / 100.0 if from_currency == "GBp" else rate
+                return rate
             else:
                 logger.warning(f"No historical data for {ticker} on {start_date}")
         
@@ -224,7 +232,7 @@ def get_exchange_rate(from_currency: str, to_currency: str, date_obj: Optional[d
         if not history.empty:
             rate = float(history['Close'].iloc[-1])
             logger.info(f"Current rate for {ticker}: {rate}")
-            return rate / 100.0 if from_currency == "GBp" else rate
+            return rate
         
         logger.warning(f"No data found for {ticker}, returning 1.0")
         return 1.0

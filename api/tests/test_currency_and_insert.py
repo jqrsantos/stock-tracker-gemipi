@@ -2,7 +2,7 @@
 import pytest
 from decimal import Decimal
 from datetime import datetime
-from main import TransactionCreate, TransactionResponse, get_native_currency
+from main import TransactionCreate, TransactionResponse, get_native_currency, get_exchange_rate
 from models import Transaction
 from metrics import calculate_portfolio_performance
 
@@ -65,3 +65,58 @@ def test_calculate_portfolio_performance_native_currency():
     # Weighted average native buy: (10*150 + 5*160)/15 = (1500 + 800)/15 = 2300/15 = 153.333333
     assert abs(aapl_pos["avg_price_native"] - 153.333333) < 0.0001
     assert aapl_pos["current_price_native"] == 165.0
+
+def test_transaction_create_currency_validation():
+    # Valid currencies should pass and be converted to uppercase
+    tx1 = TransactionCreate(
+        ticker="AAPL",
+        action="BUY",
+        quantity=Decimal("10"),
+        price=Decimal("150"),
+        currency="usd"
+    )
+    assert tx1.currency == "USD"
+
+    tx2 = TransactionCreate(
+        ticker="AAPL",
+        action="BUY",
+        quantity=Decimal("10"),
+        price=Decimal("150"),
+        currency="EUR"
+    )
+    assert tx2.currency == "EUR"
+
+    # None is allowed (defaults to native currency)
+    tx3 = TransactionCreate(
+        ticker="AAPL",
+        action="BUY",
+        quantity=Decimal("10"),
+        price=Decimal("150"),
+        currency=None
+    )
+    assert tx3.currency is None
+
+    # Invalid currencies should raise ValueError
+    with pytest.raises(ValueError, match="Currency must be EUR or USD"):
+        TransactionCreate(
+            ticker="AAPL",
+            action="BUY",
+            quantity=Decimal("10"),
+            price=Decimal("150"),
+            currency="GBP"
+        )
+
+    with pytest.raises(ValueError, match="Currency must be EUR or USD"):
+        TransactionCreate(
+            ticker="AAPL",
+            action="BUY",
+            quantity=Decimal("10"),
+            price=Decimal("150"),
+            currency="GBp"
+        )
+
+def test_get_exchange_rate_simplification():
+    # Identical currency should return 1.0
+    assert get_exchange_rate("EUR", "EUR") == 1.0
+    assert get_exchange_rate("USD", "USD") == 1.0
+

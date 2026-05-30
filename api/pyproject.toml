@@ -13,3 +13,7 @@ dependencies = [
     "pandas",
     "pyxirr",
 ]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+

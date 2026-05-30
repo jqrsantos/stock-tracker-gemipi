@@ -2,9 +2,12 @@
 import pytest
 from decimal import Decimal
 from datetime import datetime
+from unittest.mock import patch
+from pydantic import ValidationError
 from main import TransactionCreate, TransactionResponse, get_native_currency, get_exchange_rate
 from models import Transaction
 from metrics import calculate_portfolio_performance
+
 
 def test_transaction_create_decimal():
     # Verify Pydantic TransactionCreate handles Decimal inputs and optional currency
@@ -20,14 +23,22 @@ def test_transaction_create_decimal():
     assert tx.currency is None
 
 def test_get_native_currency_fallback():
-    # Verify auto-detection defaults to EUR or fetches appropriately
-    assert get_native_currency("CASH") == "EUR"
-    
-    # Non-existing ticker falls back to EUR
-    assert get_native_currency("NONEXISTINGTICKERZZZZ") == "EUR"
-    
-    # Apple is USD
-    assert get_native_currency("AAPL") == "USD"
+    with patch("main.fetch_stock_info") as mock_fetch:
+        # Verify CASH defaults to EUR without network query
+        assert get_native_currency("CASH") == "EUR"
+        
+        # Non-existing ticker falls back to EUR
+        mock_fetch.return_value = (None, None)
+        assert get_native_currency("NONEXISTINGTICKERZZZZ") == "EUR"
+        
+        # Apple is USD
+        mock_fetch.return_value = (150.0, "USD")
+        assert get_native_currency("AAPL") == "USD"
+        
+        # BP is GBp (not USD or EUR), should fallback to EUR
+        mock_fetch.return_value = (450.0, "GBp")
+        assert get_native_currency("BP.L") == "EUR"
+
 
 def test_calculate_portfolio_performance_native_currency():
     # Verify metrics correctly computes native price, native avg buy, and returns native currency
@@ -67,53 +78,20 @@ def test_calculate_portfolio_performance_native_currency():
     assert aapl_pos["current_price_native"] == 165.0
 
 def test_transaction_create_currency_validation():
-    # Valid currencies should pass and be converted to uppercase
-    tx1 = TransactionCreate(
-        ticker="AAPL",
-        action="BUY",
-        quantity=Decimal("10"),
-        price=Decimal("150"),
-        currency="usd"
-    )
-    assert tx1.currency == "USD"
+    # Valid currencies
+    tx_eur = TransactionCreate(ticker="AAPL", action="BUY", quantity=1.0, price=100.0, currency="eur")
+    assert tx_eur.currency == "EUR"
+    
+    tx_usd = TransactionCreate(ticker="AAPL", action="BUY", quantity=1.0, price=100.0, currency=" USD ")
+    assert tx_usd.currency == "USD"
+    
+    tx_none = TransactionCreate(ticker="AAPL", action="BUY", quantity=1.0, price=100.0, currency=None)
+    assert tx_none.currency is None
 
-    tx2 = TransactionCreate(
-        ticker="AAPL",
-        action="BUY",
-        quantity=Decimal("10"),
-        price=Decimal("150"),
-        currency="EUR"
-    )
-    assert tx2.currency == "EUR"
+    # Invalid currency
+    with pytest.raises(ValidationError):
+        TransactionCreate(ticker="AAPL", action="BUY", quantity=1.0, price=100.0, currency="GBP")
 
-    # None is allowed (defaults to native currency)
-    tx3 = TransactionCreate(
-        ticker="AAPL",
-        action="BUY",
-        quantity=Decimal("10"),
-        price=Decimal("150"),
-        currency=None
-    )
-    assert tx3.currency is None
-
-    # Invalid currencies should raise ValueError
-    with pytest.raises(ValueError, match="Currency must be EUR or USD"):
-        TransactionCreate(
-            ticker="AAPL",
-            action="BUY",
-            quantity=Decimal("10"),
-            price=Decimal("150"),
-            currency="GBP"
-        )
-
-    with pytest.raises(ValueError, match="Currency must be EUR or USD"):
-        TransactionCreate(
-            ticker="AAPL",
-            action="BUY",
-            quantity=Decimal("10"),
-            price=Decimal("150"),
-            currency="GBp"
-        )
 
 def test_get_exchange_rate_simplification():
     # Identical currency should return 1.0

@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 from filter_stocks import StockData, BuffettQuantitativeFilter, PeacefulFilter
 
 class TestBuffettFilter(unittest.TestCase):
@@ -116,23 +117,18 @@ class TestBuffettFilter(unittest.TestCase):
         self.assertEqual(results[0].ticker, "GOOD")
 
 class TestFilterStocksCLI(unittest.TestCase):
-    def test_cli_tickers_parsing(self):
+    @patch('sys.argv', ['filter_stocks.py', 'MOCKTICKER'])
+    @patch('filter_stocks.YFinanceFetcher.fetch_data')
+    def test_cli_tickers_parsing(self, mock_fetch):
         """Verifies that filter_stocks.py correctly parses CLI ticker arguments."""
-        import subprocess
-        import sys
-        import os
+        mock_fetch.return_value = None
+        import filter_stocks
 
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        script_path = os.path.join(script_dir, "filter_stocks.py")
+        with self.assertLogs('filter_stocks', level='INFO') as log_capture:
+            filter_stocks.main()
 
-        result = subprocess.run(
-            [sys.executable, script_path, "MOCKTICKER"],
-            capture_output=True,
-            text=True,
-            cwd=script_dir
-        )
-
-        self.assertIn("Scanning CLI specified tickers: MOCKTICKER", result.stderr)
+        log_found = any("Scanning CLI specified tickers: MOCKTICKER" in msg for msg in log_capture.output)
+        self.assertTrue(log_found, f"Log message not found in {log_capture.output}")
 
 if __name__ == "__main__":
     unittest.main()

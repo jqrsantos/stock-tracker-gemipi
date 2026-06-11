@@ -66,7 +66,7 @@ class BuffettQuantitativeFilter:
 
         return filtered_stocks
 
-if __name__ == "__main__":
+def main():
     import argparse
     parser = argparse.ArgumentParser(description="Buffett Stock Filter & Bargain Scanner")
     parser.add_argument("tickers", nargs="*", help="Optional space-separated list of tickers to scan")
@@ -116,3 +116,6 @@ if __name__ == "__main__":
         print(f"    - [EXPENSIVE PRICE]: {res.expensive_price:>7.2f} {res.currency}")
         print("-"*80)
     print("="*80)
+
+if __name__ == "__main__":
+    main()

@@ -58,7 +58,7 @@ class BuffettQuantitativeFilter:
                 continue
 
             # 5. P/E < 5-year average
-            if stock.current_pe >= stock.pe_5yr_avg:
+            if stock.pe_5yr_avg > 0.0 and stock.current_pe >= stock.pe_5yr_avg:
                 continue
 
             filtered_stocks.append(stock)

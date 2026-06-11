@@ -83,6 +83,22 @@ class TestBuffettFilter(unittest.TestCase):
         results = self.filter.filter([high_pe])
         self.assertEqual(len(results), 0)
 
+    def test_pe_5yr_avg_zero(self):
+        """Tests that if pe_5yr_avg is 0.0, the stock is not excluded by the P/E filter."""
+        zero_pe_avg = StockData(
+            ticker="ZERO_AVG",
+            name="Zero Avg Co",
+            industry="Tech",
+            roic=0.20,
+            debt_to_equity=0.5,
+            fcf_yield=0.07,
+            current_pe=15.0,
+            pe_5yr_avg=0.0
+        )
+        results = self.filter.filter([zero_pe_avg])
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].ticker, "ZERO_AVG")
+
     def test_peaceful_exclusion(self):
         """Tests that defense stocks are ALWAYS excluded even if they have great financials."""
         defense_stock = StockData(

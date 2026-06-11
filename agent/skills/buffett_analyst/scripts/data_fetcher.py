@@ -8,6 +8,7 @@ import logging
 import sys
 import math
 import yfinance as yf
+import pandas as pd
 from dataclasses import dataclass
 from typing import Optional, List
 
@@ -58,7 +59,6 @@ class YFinanceFetcher:
                 val = df.loc[key]
                 
                 # If there are duplicate indices, df.loc[key] is a DataFrame. Take the first row.
-                import pandas as pd
                 if isinstance(val, pd.DataFrame):
                     val = val.iloc[0]
                 
@@ -241,12 +241,8 @@ class YFinanceFetcher:
                 fcf_key = next((k for k in ['Free Cash Flow', 'FreeCashFlow'] if k in cashflow.index), None)
                 if fcf_key:
                     val = cashflow.loc[fcf_key]
-                    import pandas as pd
                     if isinstance(val, pd.DataFrame):
-                        if fcf_key in val.columns:
-                            fcf_history = list(val[fcf_key])
-                        else:
-                            fcf_history = list(val.iloc[:, 0])
+                        fcf_history = list(val.iloc[0])
                     elif hasattr(val, 'tolist'):
                         fcf_history = val.tolist()
                     elif hasattr(val, 'iloc'):
@@ -259,10 +255,9 @@ class YFinanceFetcher:
                     if ocf_key and capex_key:
                         ocf_val = cashflow.loc[ocf_key]
                         capex_val = cashflow.loc[capex_key]
-                        import pandas as pd
                         
                         if isinstance(ocf_val, pd.DataFrame):
-                            ocf_list = list(ocf_val.iloc[:, 0])
+                            ocf_list = list(ocf_val.iloc[0])
                         elif hasattr(ocf_val, 'tolist'):
                             ocf_list = ocf_val.tolist()
                         elif hasattr(ocf_val, 'iloc'):
@@ -271,7 +266,7 @@ class YFinanceFetcher:
                             ocf_list = [ocf_val]
                             
                         if isinstance(capex_val, pd.DataFrame):
-                            capex_list = list(capex_val.iloc[:, 0])
+                            capex_list = list(capex_val.iloc[0])
                         elif hasattr(capex_val, 'tolist'):
                             capex_list = capex_val.tolist()
                         elif hasattr(capex_val, 'iloc'):
@@ -408,7 +403,7 @@ class YFinanceFetcher:
                         if hist[0] > 0 and hist[-1] > 0:
                             n_years = len(hist) - 1
                             cagr = (hist[-1] / hist[0]) ** (1 / n_years) - 1
-                            if 0 < cagr < 0.20:
+                            if 0.0 <= cagr < 0.20:
                                 growth_rate = cagr
                             elif cagr >= 0.20:
                                 growth_rate = 0.15  # cap growth at 15% to be conservative

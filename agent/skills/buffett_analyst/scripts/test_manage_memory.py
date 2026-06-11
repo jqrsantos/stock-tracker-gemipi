@@ -36,7 +36,7 @@ This file maintains continuity across daily research reports.
 
         # Verify that JSON database was generated
         assert os.path.exists(json_file)
-        with open(json_file, "r") as f:
+        with open(json_file, "r", encoding="utf-8") as f:
             data = json.load(f)
 
         assert len(data) == 6
@@ -75,7 +75,7 @@ def test_append_insight():
         )
 
         # Load JSON directly to check contents
-        with open(json_file, "r") as f:
+        with open(json_file, "r", encoding="utf-8") as f:
             data = json.load(f)
         
         assert len(data) == 1
@@ -87,7 +87,7 @@ def test_append_insight():
         assert entry["status"] == "active"
 
         # Check compiled markdown file
-        with open(md_file, "r") as f:
+        with open(md_file, "r", encoding="utf-8") as f:
             md_content = f.read()
 
         assert "ECB keeps policy rates unchanged; signals cuts in Autumn." in md_content
@@ -111,7 +111,7 @@ def test_consolidation():
         manager.append_insight("Old energy price shock", "Energy", "2026-02-01")
 
         # Verify active vs archived status
-        with open(json_file, "r") as f:
+        with open(json_file, "r", encoding="utf-8") as f:
             data = json.load(f)
         
         # We prepended, so "Old energy price shock" is entry 1
@@ -122,7 +122,7 @@ def test_consolidation():
         assert data[1]["status"] == "archived"
 
         # Verify compiled markdown contains ONLY the active one
-        with open(md_file, "r") as f:
+        with open(md_file, "r", encoding="utf-8") as f:
             md_content = f.read()
 
         assert "Active monetary trend" in md_content

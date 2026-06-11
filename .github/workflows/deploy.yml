@@ -12,5 +12,7 @@ jobs:
       - name: Deploy to Raspberry Pi
         run: |
           cd /home/joaosantos/stock-tracker
+          git reset --hard
+          git clean -fd
           git pull origin main
           docker compose up -d --build

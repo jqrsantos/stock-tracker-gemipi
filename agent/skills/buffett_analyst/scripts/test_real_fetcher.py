@@ -15,17 +15,17 @@ class TestYFinanceFetcher(unittest.TestCase):
     def setUp(self):
         self.fetcher = YFinanceFetcher()
 
-    def test_fetch_aapl(self):
+    def test_fetch_msft(self):
         """
-        Verify that AAPL data is fetched and populated with positive values.
+        Verify that MSFT data is fetched and populated with positive values.
         """
-        data = self.fetcher.fetch_data("AAPL")
+        data = self.fetcher.fetch_data("MSFT")
         self.assertIsNotNone(data)
-        self.assertEqual(data.ticker, "AAPL")
-        self.assertEqual(data.name, "Apple Inc.")
-        self.assertIn("Apple", data.name)
+        self.assertEqual(data.ticker, "MSFT")
+        self.assertEqual(data.name, "Microsoft Corporation")
+        self.assertIn("Microsoft", data.name)
         
-        # Apple should have positive ROIC and manageable Debt/Equity
+        # Microsoft should have positive ROIC and manageable Debt/Equity
         self.assertGreater(data.roic, 0.0)
         self.assertGreaterEqual(data.debt_to_equity, 0.0)
         self.assertGreater(data.current_price, 0.0)

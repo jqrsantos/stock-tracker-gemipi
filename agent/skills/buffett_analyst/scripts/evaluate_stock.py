@@ -43,6 +43,7 @@ def main():
     print(f"Is Too Hard: {data.is_too_hard}")
     print(f"Error Message: {data.error_message}")
     print(f"Implied Growth Rate: {data.implied_growth_rate:.4f}")
+    print(f"Expected Growth Rate: {data.expected_growth_rate*100:.2f}%")
     print("=============================")
 
 if __name__ == "__main__":

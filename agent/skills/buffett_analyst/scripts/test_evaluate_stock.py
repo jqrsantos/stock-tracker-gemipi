@@ -43,6 +43,7 @@ class TestEvaluateStock(unittest.TestCase):
         mock_data.is_too_hard = False
         mock_data.error_message = ""
         mock_data.implied_growth_rate = 0.0
+        mock_data.expected_growth_rate = 0.05
         
         mock_fetch.return_value = mock_data
         
@@ -54,6 +55,7 @@ class TestEvaluateStock(unittest.TestCase):
         self.assertIn("Ticker: AAPL", output)
         self.assertIn("Name: Apple Inc.", output)
         self.assertIn("ROIC: 0.2500", output)
+        self.assertIn("Expected Growth Rate: 5.00%", output)
         self.assertIn("Valuation Methodology: Standard DCF", output)
         self.assertIn("Bargain Price: 105.00 USD", output)
         self.assertIn("Is Too Hard: False", output)

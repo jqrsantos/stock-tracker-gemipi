@@ -9,7 +9,7 @@ build/
 dist/
 *.egg-info/
 Docs/
-/docs/
+/docs/*
 /.superpowers/
 .idea/
 stock_tracker.db

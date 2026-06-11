@@ -39,6 +39,7 @@ class StockData:
     error_message: str = ""
     valuation_methodology: str = "Standard DCF"
     implied_growth_rate: float = 0.0
+    expected_growth_rate: float = 0.0
 
 class YFinanceFetcher:
     """
@@ -55,9 +56,20 @@ class YFinanceFetcher:
             if key in df.index:
                 # get most recent year (first column in yfinance)
                 val = df.loc[key]
-                # If it's a series/array, get the first item
-                if hasattr(val, 'iloc'):
+                
+                # If there are duplicate indices, df.loc[key] is a DataFrame. Take the first row.
+                import pandas as pd
+                if isinstance(val, pd.DataFrame):
                     val = val.iloc[0]
+                
+                # Now val is a Series representing the row
+                if hasattr(val, 'index') and key in val.index:
+                    # If the Series index contains the key (mocked DF where columns are metric names)
+                    val = val[key]
+                elif hasattr(val, 'iloc'):
+                    # If real yfinance (columns are dates), take the first column (newest date)
+                    val = val.iloc[0]
+                
                 # Safe numeric check and conversion
                 try:
                     if val == val and val is not None:
@@ -185,7 +197,11 @@ class YFinanceFetcher:
             cash = self.safe_get_row(balance_sheet, ['CashAndCashEquivalents', 'Cash And Cash Equivalents', 'Cash'])
             
             invested_capital = equity + debt - cash
-            roic = (nopat / invested_capital) if invested_capital > 0 else 0.0
+            if invested_capital <= 0:
+                fallback_ic = max(equity + debt, 1.0)
+                roic = nopat / fallback_ic
+            else:
+                roic = nopat / invested_capital
             
             # 3. Debt to Equity
             if equity > 0:
@@ -224,13 +240,45 @@ class YFinanceFetcher:
             if cashflow is not None and not cashflow.empty:
                 fcf_key = next((k for k in ['Free Cash Flow', 'FreeCashFlow'] if k in cashflow.index), None)
                 if fcf_key:
-                    fcf_history = list(cashflow.loc[fcf_key])
+                    val = cashflow.loc[fcf_key]
+                    import pandas as pd
+                    if isinstance(val, pd.DataFrame):
+                        if fcf_key in val.columns:
+                            fcf_history = list(val[fcf_key])
+                        else:
+                            fcf_history = list(val.iloc[:, 0])
+                    elif hasattr(val, 'tolist'):
+                        fcf_history = val.tolist()
+                    elif hasattr(val, 'iloc'):
+                        fcf_history = list(val)
+                    else:
+                        fcf_history = [val]
                 else:
                     ocf_key = next((k for k in ['Operating Cash Flow', 'OperatingCashFlow'] if k in cashflow.index), None)
                     capex_key = next((k for k in ['Capital Expenditure', 'CapitalExpenditure'] if k in cashflow.index), None)
                     if ocf_key and capex_key:
-                        ocf_list = list(cashflow.loc[ocf_key])
-                        capex_list = list(cashflow.loc[capex_key])
+                        ocf_val = cashflow.loc[ocf_key]
+                        capex_val = cashflow.loc[capex_key]
+                        import pandas as pd
+                        
+                        if isinstance(ocf_val, pd.DataFrame):
+                            ocf_list = list(ocf_val.iloc[:, 0])
+                        elif hasattr(ocf_val, 'tolist'):
+                            ocf_list = ocf_val.tolist()
+                        elif hasattr(ocf_val, 'iloc'):
+                            ocf_list = list(ocf_val)
+                        else:
+                            ocf_list = [ocf_val]
+                            
+                        if isinstance(capex_val, pd.DataFrame):
+                            capex_list = list(capex_val.iloc[:, 0])
+                        elif hasattr(capex_val, 'tolist'):
+                            capex_list = capex_val.tolist()
+                        elif hasattr(capex_val, 'iloc'):
+                            capex_list = list(capex_val)
+                        else:
+                            capex_list = [capex_val]
+                            
                         fcf_history = [float(o) + float(c) for o, c in zip(ocf_list, capex_list)]
                     
             # Clean history
@@ -243,6 +291,7 @@ class YFinanceFetcher:
             is_too_hard = False
             error_msg = ""
             implied_growth_rate = 0.0
+            expected_growth_rate = 0.0
             
             # 1. CATEGORY: Hyper-Growth / Tech Platform
             if ticker in ["NVDA", "MSFT", "NOW", "AAPL", "AMZN", "META", "GOOGL", "NFLX"] or (roic > 0.15 and current_pe > 30):
@@ -251,6 +300,13 @@ class YFinanceFetcher:
                     intrinsic_value = current_price
                     is_too_hard = True
                     error_msg = "Insufficient FCF or price data for Reverse DCF"
+                    bargain_price = 0.0
+                    fair_price = 0.0
+                    expensive_price = 0.0
+                elif len(fcf_history) >= 2 and fcf_history[0] < fcf_history[-1]:
+                    intrinsic_value = 0.0
+                    is_too_hard = True
+                    error_msg = "Declining FCF growth: Too Hard to value reliably using DCF"
                     bargain_price = 0.0
                     fair_price = 0.0
                     expensive_price = 0.0
@@ -337,6 +393,13 @@ class YFinanceFetcher:
                     bargain_price = 0.0
                     fair_price = 0.0
                     expensive_price = 0.0
+                elif len(fcf_history) >= 2 and fcf_history[0] < fcf_history[-1]:
+                    intrinsic_value = 0.0
+                    is_too_hard = True
+                    error_msg = "Declining FCF growth: Too Hard to value reliably using DCF"
+                    bargain_price = 0.0
+                    fair_price = 0.0
+                    expensive_price = 0.0
                 else:
                     # Dynamic growth rate calculation
                     growth_rate = 0.08  # standard 8% conservative growth
@@ -350,6 +413,7 @@ class YFinanceFetcher:
                             elif cagr >= 0.20:
                                 growth_rate = 0.15  # cap growth at 15% to be conservative
                     
+                    expected_growth_rate = growth_rate
                     discount_rate = 0.10  # standard discount rate
                     terminal_growth = 0.02  # standard terminal growth rate
                     
@@ -376,7 +440,8 @@ class YFinanceFetcher:
                 is_too_hard=is_too_hard,
                 error_message=error_msg,
                 valuation_methodology=valuation_methodology,
-                implied_growth_rate=implied_growth_rate
+                implied_growth_rate=implied_growth_rate,
+                expected_growth_rate=expected_growth_rate
             )
             
         except Exception as e:

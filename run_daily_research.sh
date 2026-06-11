@@ -30,11 +30,13 @@ fi
 AGY_BIN=$(command -v agy || echo "$USER_HOME/.local/bin/agy")
 
 if ! "$AGY_BIN" --prompt "You are a senior financial research agent. Use your 'Buffett Strategic Analyst' skill to perform a Deep Scour of the current portfolio: ($PORTFOLIO_TICKERS) and find bargains.
-1. Run the python evaluation and filtering scripts (evaluate_portfolio.py, filter_stocks.py) to fetch real, live data via yfinance. DO NOT use superficial web searches for financial data.
-2. Apply the dynamic valuation strategy (Stable DCF, Reverse DCF implied growth check, or Normalized Mid-Cycle averages) depending on the stock's business category (predictable, hyper-growth, or cyclical).
-3. STRICT MANDATE: Exclude all non-peaceful stocks (defense/munitions/tactical surveillance).
-4. Persist the identified bargains with their calculated dynamic price intervals (Bargain, Fair, Expensive) using 'POST /bargains/'.
-5. Update the knowledge base and active memory, and write the final report. Print 'REPORT_COMPLETE' when finished." --dangerously-skip-permissions; then
+1. Perform web searches to identify 5-10 undervalued high-quality compounders, stocks hitting 52-week lows, or sector-specific opportunities (excluding defense/espionage).
+2. Combine these dynamically searched tickers with the portfolio tickers.
+3. Run filter_stocks.py passing all these tickers as command line arguments (e.g. 'python3 filter_stocks.py AAPL MSFT HPQ ...'). If no arguments are passed, it runs on the baseline.
+4. Apply the dynamic valuation strategy (Stable DCF, Reverse DCF, or Normalized Mid-Cycle averages) depending on the stock's business category (predictable, hyper-growth, or cyclical). If FCF growth is negative, classify it as 'Too Hard' to value.
+5. STRICT MANDATE: Exclude all non-peaceful stocks (defense/munitions/tactical surveillance).
+6. Persist identified bargains with their calculated dynamic price intervals (Bargain, Fair, Expensive) using 'POST /bargains/'.
+7. Update the knowledge base and active memory, and write the final report. Print 'REPORT_COMPLETE' when finished." --dangerously-skip-permissions; then
   echo "Error: Financial research run failed." >&2
   exit 1
 fi

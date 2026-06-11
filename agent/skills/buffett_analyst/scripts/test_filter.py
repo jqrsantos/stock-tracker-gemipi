@@ -115,5 +115,24 @@ class TestBuffettFilter(unittest.TestCase):
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].ticker, "GOOD")
 
+class TestFilterStocksCLI(unittest.TestCase):
+    def test_cli_tickers_parsing(self):
+        """Verifies that filter_stocks.py correctly parses CLI ticker arguments."""
+        import subprocess
+        import sys
+        import os
+
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        script_path = os.path.join(script_dir, "filter_stocks.py")
+
+        result = subprocess.run(
+            [sys.executable, script_path, "MOCKTICKER"],
+            capture_output=True,
+            text=True,
+            cwd=script_dir
+        )
+
+        self.assertIn("Scanning CLI specified tickers: MOCKTICKER", result.stderr)
+
 if __name__ == "__main__":
     unittest.main()

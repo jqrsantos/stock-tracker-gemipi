@@ -67,13 +67,26 @@ class BuffettQuantitativeFilter:
         return filtered_stocks
 
 if __name__ == "__main__":
-    # Curated list of high-quality, stable non-defense global candidates
-    curated_tickers = [
-        "AAPL", "MSFT", "GOOGL", "AMZN", "KO", "PEP", "PG", "JNJ", 
-        "COST", "MCD", "NKE", "V", "MA", "ADBE", "CRM"
-    ]
+    import argparse
+    parser = argparse.ArgumentParser(description="Buffett Stock Filter & Bargain Scanner")
+    parser.add_argument("tickers", nargs="*", help="Optional space-separated list of tickers to scan")
+    args = parser.parse_args()
     
-    logger.info(f"Starting real-data bargain scanning for: {', '.join(curated_tickers)}")
+    if args.tickers:
+        curated_tickers = [t.upper() for t in args.tickers]
+        logger.info(f"Scanning CLI specified tickers: {', '.join(curated_tickers)}")
+    else:
+        # Expanded 50+ high-quality global non-defense companies
+        curated_tickers = [
+            "AAPL", "MSFT", "GOOGL", "AMZN", "KO", "PEP", "PG", "JNJ", 
+            "COST", "MCD", "NKE", "V", "MA", "ADBE", "CRM", "ACN", 
+            "ASML", "UNH", "WMT", "ORCL", "CSCO", "DIS", "HD", "SBUX", 
+            "ABT", "MRK", "PFE", "LLY", "JPM", "BAC", "AXP", "CAT", 
+            "HON", "TXN", "QCOM", "DE", "UPS", "FDX", "WM", "EL", "TGT",
+            "LOW", "TJX", "ISRG", "NVS", "SAP", "TM", "SONY", "CL", "AMAT",
+            "INTU", "FISV"
+        ]
+        logger.info(f"No tickers specified. Scanning default high-quality list: {', '.join(curated_tickers)}")
     fetcher = YFinanceFetcher()
     
     stocks = []

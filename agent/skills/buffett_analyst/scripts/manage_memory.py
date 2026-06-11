@@ -50,15 +50,18 @@ class MemoryManager:
         # Bootstrap from Markdown file if JSON doesn't exist
         if os.path.exists(self.file_path):
             logger.info(f"JSON database not found. Bootstrapping from {self.file_path}...")
-            self._bootstrap_from_markdown()
-            self.prune_memory()
-            self.save_memory()
+            if self._bootstrap_from_markdown():
+                self.prune_memory()
+                self.save_memory()
+            else:
+                logger.error("Bootstrap failed. Aborting initialization to prevent data loss.")
+                self.entries = []
         else:
             logger.info("No memory files found. Initializing empty database.")
             self.entries = []
 
     def _classify_insight(self, insight: str) -> str:
-        """Classifies a raw insight into one of the 4 defined categories."""
+        """Classifies a raw insight into one of the 4 defined categories using regex word boundaries."""
         insight_lower = insight.lower()
         
         # Keyword rules
@@ -67,19 +70,26 @@ class MemoryManager:
         geopolitical_keywords = ["geopolitical", "geopolitics", "war", "conflict", "election", "sanction", "instability", "military"]
         regional_keywords = ["china", "japan", "us", "eu", "europe", "yen", "stimulus", "eurozone", "tariff", "trade"]
 
-        if any(k in insight_lower for k in monetary_keywords):
+        def matches_any(keywords: List[str]) -> bool:
+            for k in keywords:
+                pattern = r'\b' + re.escape(k) + r'\b'
+                if re.search(pattern, insight_lower):
+                    return True
+            return False
+
+        if matches_any(monetary_keywords):
             return "Monetary Policy"
-        if any(k in insight_lower for k in energy_keywords):
+        if matches_any(energy_keywords):
             return "Energy"
-        if any(k in insight_lower for k in geopolitical_keywords):
+        if matches_any(geopolitical_keywords):
             return "Geopolitics"
-        if any(k in insight_lower for k in regional_keywords):
+        if matches_any(regional_keywords):
             return "Regional"
         
         return "Monetary Policy" # Default fallback
 
-    def _bootstrap_from_markdown(self):
-        """Parses the existing Markdown file and converts entries to structured JSON."""
+    def _bootstrap_from_markdown(self) -> bool:
+        """Parses the existing Markdown file and converts entries to structured JSON. Returns True on success, False on failure."""
         try:
             with open(self.file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
@@ -88,6 +98,7 @@ class MemoryManager:
             pattern = r'-\s*\*\*(\d{4}-\d{2}-\d{2})\*\*:\s*(.*)'
             matches = re.findall(pattern, content)
 
+            temp_entries = []
             for date_str, insight in matches:
                 insight_clean = insight.strip()
                 category = self._classify_insight(insight_clean)
@@ -98,7 +109,7 @@ class MemoryManager:
                 
                 status = "active" if expires_at >= self.reference_date else "archived"
 
-                self.entries.append({
+                temp_entries.append({
                     "date": date_str,
                     "category": category,
                     "insight": insight_clean,
@@ -106,9 +117,12 @@ class MemoryManager:
                     "expires_at": expires_at.strftime("%Y-%m-%d")
                 })
             
+            self.entries = temp_entries
             logger.info(f"Successfully bootstrapped {len(self.entries)} entries from markdown.")
+            return True
         except Exception as e:
             logger.error(f"Error bootstrapping from markdown: {e}")
+            return False
 
     def append_insight(self, insight: str, category: str = None, date_str: str = None):
         """Appends a new insight to the database."""

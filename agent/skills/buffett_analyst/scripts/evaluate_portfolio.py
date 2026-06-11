@@ -71,9 +71,9 @@ class PortfolioEvaluator:
         debt_ok = data.debt_to_equity < 1.0
         
         # 3. Valuation check: compare current price vs intrinsic/bounds
-        # For Reverse DCF, if current price has a reasonable implied growth
+        # For Reverse DCF, if current price has a reasonable implied growth OR trades below fair price
         if data.valuation_methodology == "Reverse DCF":
-            valuation_ok = data.implied_growth_rate < 0.25  # Implied growth less than 25% is solid
+            valuation_ok = data.current_price < data.fair_price or data.implied_growth_rate < 0.25
         else:
             valuation_ok = data.current_price < data.fair_price or data.fcf_yield > 0.05
 

@@ -6,6 +6,7 @@ Computes true Warren Buffett investing metrics: ROIC, Debt/Equity, FCF Yield, an
 
 import logging
 import sys
+import math
 import yfinance as yf
 from dataclasses import dataclass
 from typing import Optional, List
@@ -187,7 +188,15 @@ class YFinanceFetcher:
             roic = (nopat / invested_capital) if invested_capital > 0 else 0.0
             
             # 3. Debt to Equity
-            debt_to_equity = (debt / equity) if equity > 0 else (999.0 if debt > 0 else 0.0)
+            if equity > 0:
+                debt_to_equity = debt / equity
+            else:
+                # Fallback to Debt to Market Equity if Book Equity is negative or zero (e.g., due to aggressive share buybacks)
+                mc = info.get('marketCap') or 0.0
+                if mc > 0:
+                    debt_to_equity = debt / mc
+                else:
+                    debt_to_equity = 999.0 if debt > 0 else 0.0
             
             # 4. FCF Yield
             fcf = self.safe_get_row(cashflow, ['FreeCashFlow', 'Free Cash Flow'])
@@ -236,7 +245,7 @@ class YFinanceFetcher:
             implied_growth_rate = 0.0
             
             # 1. CATEGORY: Hyper-Growth / Tech Platform
-            if ticker in ["NVDA", "MSFT"] or (roic > 0.20 and current_pe > 35):
+            if ticker in ["NVDA", "MSFT", "NOW", "AAPL", "AMZN", "META", "GOOGL", "NFLX"] or (roic > 0.15 and current_pe > 30):
                 valuation_methodology = "Reverse DCF"
                 if not fcf_history or fcf_history[0] <= 0 or current_price <= 0 or shares <= 0:
                     intrinsic_value = current_price
@@ -250,21 +259,55 @@ class YFinanceFetcher:
                     fcf_base = fcf_history[0]
                     implied_growth_rate = self.solve_implied_growth(current_price, fcf_base, shares)
                     
-                    # Valuation boundaries are established relative to implied rate
-                    # If current price implies a conservative growth, it's a bargain
-                    intrinsic_value = current_price
-                    bargain_price = current_price * 0.80
-                    fair_price = current_price
-                    expensive_price = current_price * 1.30
+                    # Solve for expected growth rate based on historical CAGR cap
+                    expected_growth_rate = 0.15  # Default 15% expected growth for hyper-growth/tech
+                    if len(fcf_history) >= 2:
+                        hist = fcf_history[::-1] # Clean oldest to newest (oldest is index 0)
+                        if hist[0] > 0 and hist[-1] > 0:
+                            n_years = len(hist) - 1
+                            cagr = (hist[-1] / hist[0]) ** (1 / n_years) - 1
+                            if 0 < cagr < 0.30:
+                                expected_growth_rate = cagr
+                            elif cagr >= 0.30:
+                                expected_growth_rate = 0.25 # cap at 25% for conservative hyper-growth
+                                
+                    # Valuation boundaries are established relative to expected rate
+                    discount_rate = 0.10
+                    terminal_growth = 0.02
+                    intrinsic_value = self.calculate_dcf_value(expected_growth_rate, fcf_base, shares, discount_rate, terminal_growth)
+                    
+                    bargain_price = intrinsic_value * 0.70
+                    fair_price = intrinsic_value
+                    expensive_price = intrinsic_value * 1.20
 
             # 2. CATEGORY: Cyclical / Asset-Heavy
-            elif ticker in ["INTC"] or (roic < 0.10 and len(fcf_history) >= 2) or (not fcf_history or fcf_history[0] <= 0):
+            elif ticker in ["INTC", "MU"] or (roic < 0.10 and len(fcf_history) >= 2) or (not fcf_history or fcf_history[0] <= 0):
                 valuation_methodology = "Mid-Cycle Normalized"
-                # Evaluate using 5-year average multiples & current metrics
-                eps_5yr_avg = info.get('trailingEps') or 1.50 # safe default
+                
+                # Calculate real historical average EPS from income statement
+                eps_5yr_avg = 0.0
+                if income_stmt is not None and not income_stmt.empty:
+                    eps_key = next((k for k in ['Diluted EPS', 'DilutedEPS', 'Basic EPS', 'BasicEPS'] if k in income_stmt.index), None)
+                    if eps_key is not None:
+                        eps_vals = income_stmt.loc[eps_key]
+                        if hasattr(eps_vals, 'iloc'):
+                            eps_list = [float(x) for x in eps_vals if x == x and x is not None]
+                        else:
+                            eps_list = [float(eps_vals)]
+                        eps_list = [x for x in eps_list if not math.isnan(x) and not math.isinf(x)]
+                        if eps_list:
+                            eps_5yr_avg = sum(eps_list) / len(eps_list)
+                            
+                # Fallback to trailing EPS if average is negative or zero or not found
                 if eps_5yr_avg <= 0:
-                    eps_5yr_avg = 1.50
-                target_pe = pe_5yr_avg if pe_5yr_avg > 0 else 15.0
+                    eps_5yr_avg = info.get('trailingEps') or 1.50
+                    if eps_5yr_avg <= 0:
+                        eps_5yr_avg = 1.50
+                
+                # Target PE: if missing or over 25, fallback to 15.0
+                target_pe = pe_5yr_avg
+                if not target_pe or target_pe <= 0 or target_pe > 25.0:
+                    target_pe = 15.0
                 
                 intrinsic_value = eps_5yr_avg * target_pe
                 # If PE is missing, fallback to book value

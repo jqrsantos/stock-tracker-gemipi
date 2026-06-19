@@ -72,6 +72,78 @@ def extract_tldr(markdown_text: str) -> str:
     </div>
     """
 
+def format_stock_cards(html_content: str) -> str:
+    """
+    Parses generated stock metrics blocks into separate compact visual cards with left border accents.
+    """
+    # Matches:
+    # ### Ticker (Company Name) - STATUS
+    # * **ROIC**: value
+    # * **Debt/Equity**: value
+    # * **FCF Yield**: value
+    # * **Valuation**: value
+    # Supports optional bullet points (* or -), optional bold tags (**), and spaces/newlines.
+    stock_pattern = r'<h3>([A-Z0-9\-\.]+)\s*\((.*?)\)\s*-\s*(STRONG BUY|STRONG HOLD|STRONG SELL|BUY|HOLD|SELL)<\/h3>\s*<ul>\s*<li>(?:<strong>)?ROIC(?:<\/strong>)?:?\s*(.*?)<\/li>\s*<li>(?:<strong>)?Debt/Equity(?:<\/strong>)?:?\s*(.*?)<\/li>\s*<li>(?:<strong>)?FCF Yield(?:<\/strong>)?:?\s*(.*?)<\/li>\s*<li>(?:<strong>)?Valuation(?:<\/strong>)?:?\s*(.*?)<\/li>\s*<\/ul>'
+    
+    def replace_with_card(match):
+        ticker = match.group(1).strip()
+        name = match.group(2).strip()
+        status = match.group(3).upper()
+        roic = match.group(4).strip()
+        de = match.group(5).strip()
+        fcf = match.group(6).strip()
+        val = match.group(7).strip()
+        
+        # Color mapping
+        border_color = "#3b82f6"  # Blue default
+        bg_status = "#f1f5f9"
+        text_status = "#475569"
+        
+        if "BUY" in status:
+            border_color = "#10b981"  # Green
+            bg_status = "#ecfdf5"
+            text_status = "#059669"
+        elif "SELL" in status:
+            border_color = "#ef4444"  # Red
+            bg_status = "#fef2f2"
+            text_status = "#ef4444"
+        elif "HOLD" in status:
+            border_color = "#d97706"  # Amber
+            bg_status = "#fffbeb"
+            text_status = "#d97706"
+            
+        return f"""
+        <div style="background: #ffffff; border: 1px solid #e2e8f0; border-left: 5px solid {border_color}; border-radius: 8px; padding: 18px 22px; margin-bottom: 28px; max-width: 360px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <div>
+              <h3 style="margin: 0; font-size: 1.15rem; font-weight: 800; color: #0f172a; letter-spacing: -0.02em;">{ticker}</h3>
+              <span style="font-size: 0.75rem; color: #64748b; font-weight: 500;">{name}</span>
+            </div>
+            <span style="background: {bg_status}; color: {text_status}; padding: 4px 10px; border-radius: 100px; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase;">{status}</span>
+          </div>
+          
+          <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem; line-height: 1.4;">
+            <tr>
+              <td style="padding: 5px 0; border-bottom: 1px dashed #f1f5f9; color: #64748b; text-align: left;">ROIC</td>
+              <td style="padding: 5px 0; border-bottom: 1px dashed #f1f5f9; text-align: right; font-weight: 700; color: #0f172a;">{roic}</td>
+            </tr>
+            <tr>
+              <td style="padding: 5px 0; border-bottom: 1px dashed #f1f5f9; color: #64748b; text-align: left;">Debt/Equity</td>
+              <td style="padding: 5px 0; border-bottom: 1px dashed #f1f5f9; text-align: right; font-weight: 700; color: #0f172a;">{de}</td>
+            </tr>
+            <tr>
+              <td style="padding: 5px 0; border-bottom: 1px dashed #f1f5f9; color: #64748b; text-align: left;">FCF Yield</td>
+              <td style="padding: 5px 0; border-bottom: 1px dashed #f1f5f9; text-align: right; font-weight: 700; color: #0f172a;">{fcf}</td>
+            </tr>
+            <tr>
+              <td style="padding: 5px 0; color: #64748b; text-align: left;">Valuation</td>
+              <td style="padding: 5px 0; text-align: right; font-weight: 700; color: {border_color};">{val}</td>
+            </tr>
+          </table>
+        </div>
+        """
+    return re.sub(stock_pattern, replace_with_card, html_content, flags=re.DOTALL)
+
 def build_html_body(subject: str, markdown_content: str) -> str:
     """
     Converts report markdown into a beautifully designed HTML document.
@@ -95,9 +167,18 @@ def build_html_body(subject: str, markdown_content: str) -> str:
     styled_html = styled_html.replace("<strong>BULLISH</strong>", '<span style="background: #ecfdf5; color: #10b981; padding: 2px 6px; border-radius: 12px; font-size: 0.75rem; font-weight: 700;">BULLISH</span>')
     styled_html = styled_html.replace("<strong>BEARISH</strong>", '<span style="background: #fef2f2; color: #ef4444; padding: 2px 6px; border-radius: 12px; font-size: 0.75rem; font-weight: 700;">BEARISH</span>')
 
+    # Format stock cards
+    styled_html = format_stock_cards(styled_html)
+
+    # Style <p> tags
+    styled_html = styled_html.replace("<p>", '<p style="margin-bottom: 16px; line-height: 1.8; text-align: left;">')
+
+    # Style <pre> block to format the AHP-TOPSIS ASCII table properly
+    styled_html = styled_html.replace("<pre>", '<pre style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; font-family: monospace; font-size: 0.85rem; line-height: 1.4; overflow-x: auto; margin-bottom: 24px; text-align: left;">')
+
     # Styled sections
-    styled_html = re.sub(r'<h3>(.*?)</h3>', r'<h3 style="margin: 28px 0 12px 0; font-size: 1.1rem; font-weight: 700; color: #0f172a; border-bottom: 2px solid #f1f5f9; padding-bottom: 8px;">\1</h3>', styled_html)
-    styled_html = re.sub(r'<h2>(.*?)</h2>', r'<h2 style="margin: 24px 0 12px 0; font-size: 1.25rem; font-weight: 700; color: #0f172a; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px;">\1</h2>', styled_html)
+    styled_html = re.sub(r'<h3>(.*?)</h3>', r'<h3 style="font-size: 1.15rem; font-weight: 700; color: #1e293b; margin-top: 24px; margin-bottom: 12px; text-align: left;">\1</h3>', styled_html)
+    styled_html = re.sub(r'<h2>(.*?)</h2>', r'<h2 style="font-size: 1.35rem; font-weight: 800; color: #0f172a; margin-top: 40px; margin-bottom: 16px; border-bottom: 2px solid #e2e8f0; padding-bottom: 6px; text-transform: uppercase; text-align: left;">\1</h2>', styled_html)
 
     return f"""
     <!DOCTYPE html>

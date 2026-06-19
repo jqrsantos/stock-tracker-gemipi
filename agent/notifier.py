@@ -46,10 +46,11 @@ def extract_tldr(markdown_text: str) -> str:
     """
     highlights = []
     # Look for GLOBAL NARRATIVE highlights or key sentences
-    narrative_section = re.search(r"## \[GLOBAL NARRATIVE\]\s*(.*?)(?=##|$)", markdown_text, re.DOTALL)
+    narrative_section = re.search(r"## \[(GLOBAL NARRATIVE|MACRO DASHBOARD)\]\s*(.*?)(?=##|$)", markdown_text, re.DOTALL)
     if narrative_section:
-        text = narrative_section.group(1).strip()
-        sentences = [s.strip() + "." for s in text.split(".") if len(s.strip()) > 10]
+        text = narrative_section.group(2).strip()
+        sentences = re.split(r'\.(?=\s+[A-Z]|\s*$)', text)
+        sentences = [s.strip() + "." for s in sentences if len(s.strip()) > 10]
         highlights.extend(sentences[:2])
     
     # Look for Bargain Radar picks

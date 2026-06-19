@@ -1,5 +1,5 @@
 import re
-from notifier import build_html_body, format_stock_cards
+from notifier import build_html_body, format_stock_cards, extract_tldr
 
 def test_format_stock_cards_buy():
     html_input = """
@@ -64,3 +64,23 @@ Another paragraph.
     
     # Check pre styling for code block
     assert 'style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; font-family: monospace; font-size: 0.85rem; line-height: 1.4; overflow-x: auto; margin-bottom: 24px; text-align: left;"' in html_body
+
+def test_extract_tldr_decimal_splitting():
+    markdown_content = """
+## [GLOBAL NARRATIVE]
+CPI increased by 3.2% last month. The Fed is expected to pause rate hikes. This is another sentence.
+    """
+    html_block = extract_tldr(markdown_content)
+    # Check that "3.2%" wasn't split.
+    assert "3.2% last month" in html_block
+    assert "CPI increased by 3.2% last month." in html_block
+    assert "The Fed is expected to pause rate hikes." in html_block
+
+def test_extract_tldr_macro_dashboard_heading():
+    markdown_content = """
+## [MACRO DASHBOARD]
+Inflation remains persistent at 4.1%. Unemployment rates are still low at 3.5%.
+    """
+    html_block = extract_tldr(markdown_content)
+    assert "Inflation remains persistent at 4.1%." in html_block
+    assert "Unemployment rates are still low at 3.5%." in html_block

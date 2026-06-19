@@ -1,4 +1,5 @@
 # agent/skills/buffett_analyst/scripts/engine.py
+import os
 import sys
 import argparse
 import pandas as pd
@@ -18,8 +19,9 @@ def run_ahp(pairwise_matrix: np.ndarray) -> Tuple[np.ndarray, float]:
     max_idx = np.argmax(np.real(eigvals))
     lambda_max = np.real(eigvals[max_idx])
     
-    # Extract corresponding eigenvector and normalize to sum to 1
+    # Extract corresponding eigenvector, ensure elements are positive, and normalize to sum to 1
     weights = np.real(eigvecs[:, max_idx])
+    weights = np.abs(weights)
     weights = weights / np.sum(weights)
     
     # Calculate CI and CR
@@ -32,11 +34,31 @@ def run_ahp(pairwise_matrix: np.ndarray) -> Tuple[np.ndarray, float]:
         
     return weights, cr
 
+def get_ahp_weights(pairwise_matrix: np.ndarray) -> np.ndarray:
+    """
+    Calculates weights from pairwise AHP matrix, checking CR and falling back if needed.
+    """
+    n = pairwise_matrix.shape[0]
+    weights, cr = run_ahp(pairwise_matrix)
+    if cr >= 0.10:
+        print(f"Warning: AHP matrix inconsistency detected (CR = {cr:.4f} >= 0.10). Using equal weights fallback.")
+        weights = np.ones(n) / float(n)
+    return weights
+
 def run_topsis(matrix: np.ndarray, weights: np.ndarray, criteria_beneficial: List[bool]) -> np.ndarray:
     """
     Runs TOPSIS vectorization on a decision matrix and returns Closeness Coefficients.
     """
     m, n = matrix.shape
+    if m == 0:
+        return np.zeros(0)
+        
+    # Dimensionality Validation
+    if len(weights) != n:
+        raise ValueError(f"Length of weights ({len(weights)}) does not match number of criteria ({n})")
+    if len(criteria_beneficial) != n:
+        raise ValueError(f"Length of criteria_beneficial ({len(criteria_beneficial)}) does not match number of criteria ({n})")
+        
     # Normalize the decision matrix using vector norm
     norm_matrix = np.zeros((m, n))
     for j in range(n):
@@ -80,7 +102,7 @@ def generate_action_matrix(df: pd.DataFrame, holdings: List[str]) -> pd.DataFram
     actions = []
     
     for idx, row in df.iterrows():
-        ticker = row['Ticker'].upper()
+        ticker = str(row['Ticker']).upper()
         score = row['Score']
         owned = ticker in holdings_upper
         
@@ -99,21 +121,43 @@ def generate_action_matrix(df: pd.DataFrame, holdings: List[str]) -> pd.DataFram
 def generate_ascii_table(df: pd.DataFrame, holdings: List[str]) -> str:
     """
     Renders the final ranked matrix as an ASCII terminal summary table.
+    Supports dynamic column widths.
     """
+    if df.empty:
+        return (
+            "+--------+------------+--------------+---------------+\n"
+            "| No data available to display.                      |\n"
+            "+--------+------------+--------------+---------------+"
+        )
+        
     holdings_upper = [t.upper() for t in holdings]
-    df['Status'] = df['Ticker'].apply(lambda t: "Owned" if t.upper() in holdings_upper else "Watchlist")
+    df['Status'] = df['Ticker'].apply(lambda t: "Owned" if str(t).upper() in holdings_upper else "Watchlist")
+    
+    # Convert score to 4 decimal places string for proper width calculations
+    df_str = df.copy()
+    df_str['Score_str'] = df_str['Score'].apply(lambda s: f"{s:.4f}")
+    
+    # Determine dynamic widths
+    w_ticker = max(6, df_str['Ticker'].astype(str).str.len().max())
+    w_status = max(10, df_str['Status'].astype(str).str.len().max())
+    w_score = max(12, df_str['Score_str'].astype(str).str.len().max())
+    w_action = max(13, df_str['Matrix Action'].astype(str).str.len().max())
+    
+    # Create formatting lines
+    border = f"+-{'-'*w_ticker}-+-{'-'*w_status}-+-{'-'*w_score}-+-{'-'*w_action}-+"
+    header = f"| {'Ticker':<{w_ticker}} | {'Status':<{w_status}} | {'TOPSIS Score':<{w_score}} | {'Matrix Action':<{w_action}} |"
     
     lines = []
-    lines.append("+--------+------------+--------------+---------------+")
-    lines.append("| Ticker | Status     | TOPSIS Score | Matrix Action |")
-    lines.append("+--------+------------+--------------+---------------+")
-    for _, row in df.iterrows():
-        ticker = f"{row['Ticker']:<6}"
-        status = f"{row['Status']:<10}"
-        score = f"{row['Score']:.4f}"
-        action = f"{row['Matrix Action']:<13}"
-        lines.append(f"| {ticker} | {status} |     {score}   | {action} |")
-    lines.append("+--------+------------+--------------+---------------+")
+    lines.append(border)
+    lines.append(header)
+    lines.append(border)
+    for _, row in df_str.iterrows():
+        ticker = f"{str(row['Ticker']):<{w_ticker}}"
+        status = f"{str(row['Status']):<{w_status}}"
+        score = f"{row['Score_str']:<{w_score}}"
+        action = f"{str(row['Matrix Action']):<{w_action}}"
+        lines.append(f"| {ticker} | {status} | {score} | {action} |")
+    lines.append(border)
     return "\n".join(lines)
 
 def main():
@@ -133,14 +177,18 @@ def main():
         [0.5, 1.0, 3.0, 2.0, 1.0]
     ])
     
-    weights, cr = run_ahp(pairwise)
-    if cr >= 0.10:
-        print(f"Warning: AHP matrix inconsistency detected (CR = {cr:.4f} >= 0.10). Using equal weights fallback.")
-        weights = np.ones(5) / 5.0
+    weights = get_ahp_weights(pairwise)
         
     # 2. Ingest Data
     if args.data_path:
-        df = pd.read_csv(args.data_path)
+        if not os.path.exists(args.data_path):
+            print(f"Error: Data path '{args.data_path}' does not exist.")
+            sys.exit(1)
+        try:
+            df = pd.read_csv(args.data_path)
+        except Exception as e:
+            print(f"Error: Failed to read CSV file: {e}")
+            sys.exit(1)
     else:
         # Load a default mockup CSV dataset
         mockup_data = {
@@ -152,6 +200,13 @@ def main():
             "OperatingMargin": [0.284, 0.354, 0.251, 0.082, 0.041]
         }
         df = pd.DataFrame(mockup_data)
+        
+    # Schema Validation
+    required_columns = ['Ticker', 'ROIC', 'ROE', 'PE', 'DebtToEquity', 'OperatingMargin']
+    missing_columns = [col for col in required_columns if col not in df.columns]
+    if missing_columns:
+        print(f"Error: The input data is missing required columns: {missing_columns}")
+        sys.exit(1)
         
     # Standardize column extraction
     tickers = df['Ticker'].tolist()

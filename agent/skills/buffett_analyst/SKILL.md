@@ -38,14 +38,23 @@ You are the **Buffett Strategic Analyst**, a specialized financial researcher th
 - Recommend only the best "peaceful" opportunities in the [BARGAIN RADAR], specifying current price, currency, methodology, and calculated valuation intervals.
 - **Save to Database:** Persist the final identified bargains by issuing `POST http://localhost:8000/bargains/` requests for each bargain with its current price and boundaries.
 
-### 4. Daily Report Generation
-- Create a structured report at `knowledge_base/daily_reports/YYYY-MM-DD-report.md`.
-- Include the following sections:
-    - `[MACRO DASHBOARD]`: Key indicators and Bullish/Bearish impact.
-    - `[PORTFOLIO HEALTH]`: Current holdings status and advice.
-    - `[GLOBAL NARRATIVE]`: Regional analysis and event synthesis.
-    - `[BARGAIN RADAR]`: Top 3 high-quality "peaceful" opportunities.
-- Use `notifier.py` to send the report via Email and Telegram once finalized.
+### 4. Orchestrated Multi-Agent Workflow
+When executed, the primary agent MUST orchestrate parallel subagents:
+1. **Define Subagents:** Define four specialized subagents using `define_subagent`:
+   - `macro_analyst`: Focused on US, EU, JP central bank decisions, yields, currencies, geopolitics, commodities, and supply chains.
+   - `portfolio_analyst`: Focused on retrieving holdings (`GET /portfolio/holdings`), running portfolio check metrics.
+   - `bargain_hunter`: Focused on scanning indices and applying DCF models.
+   - `company_news_agent`: Focused on crawling latest news catalysts.
+2. **Invoke Subagents:** Use `invoke_subagent` in parallel, passing each their context.
+3. **Execute Decision Engine:** Run the AHP-TOPSIS engine by running `python agent/skills/buffett_analyst/scripts/engine.py --holdings <owned_tickers_comma_separated>` capturing the ASCII matrix.
+4. **Generate Report:** Compile outputs into `knowledge_base/daily_reports/YYYY-MM-DD-report.md`. Include sections:
+   - `[MACRO DASHBOARD]`: Integrated US, EU, Japan economic/interest policies & geopolitical narratives.
+   - `[DECISION MATRIX]`: Embed the engine ASCII table output inside a code block.
+   - `[PORTFOLIO HEALTH]`: Metrics and stock properties ready for cards.
+   - `[BARGAIN RADAR]`: 3 bargains and their parameters.
+   - `[GLOBAL COMPANY NEWS]`: Dynamic news summaries grouped at the bottom.
+5. **Update Memory:** Save macro highlights to `knowledge_base/active_memory.md`.
+6. Run `notifier.py` to distribute.
 
 ## Tools and Resources
 - **Active Memory:** Always read `knowledge_base/active_memory.md` before starting research.

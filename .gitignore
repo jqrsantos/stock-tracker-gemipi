@@ -9,11 +9,9 @@ build/
 dist/
 *.egg-info/
 Docs/
-/docs/*
-/.superpowers/
 .idea/
 stock_tracker.db
-knowledge_base/daily_reports/
+knowledge_base/
 uv.lock
 *_export.csv
 test.html

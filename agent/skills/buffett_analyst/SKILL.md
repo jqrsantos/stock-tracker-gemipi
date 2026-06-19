@@ -1,4 +1,5 @@
 ---
+name: buffett_analyst
 description: "ALWAYS use this skill when the user asks for financial research, stock market analysis, daily investment reports, or bargain hunting using Warren Buffett's value investing principles. This skill handles global macro synthesis, portfolio health evaluation, and finding high-quality 'peaceful' stocks with strong moats and margins of safety, while strictly excluding defense and war-oriented industries."
 ---
 

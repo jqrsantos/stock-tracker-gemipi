@@ -15,3 +15,6 @@ Docs/
 stock_tracker.db
 knowledge_base/daily_reports/
 uv.lock
+*_export.csv
+test.html
+

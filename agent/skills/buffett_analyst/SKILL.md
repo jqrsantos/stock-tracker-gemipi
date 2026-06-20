@@ -55,8 +55,7 @@ When executed, the primary agent MUST orchestrate parallel subagents:
    - `[BARGAIN RADAR]`: 3 bargains and their parameters.
    - `[GLOBAL COMPANY NEWS]`: Dynamic news summaries grouped at the bottom.
 5. **Update Memory:** Save macro highlights to `knowledge_base/active_memory.md`.
-6. Run `notifier.py` to distribute.
-7. **Subagent & API Error Fallback:** Handle API call failures or subagent errors gracefully. If any subagent or endpoint fails, log a warning block in the final report and proceed using default or empty values, rather than crashing the workflow.
+6. **Subagent & API Error Fallback:** Handle API call failures or subagent errors gracefully. If any subagent or endpoint fails, log a warning block in the final report and proceed using default or empty values, rather than crashing the workflow.
 
 ## Tools and Resources
 - **Active Memory:** Always read `knowledge_base/active_memory.md` before starting research.

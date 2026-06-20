@@ -174,11 +174,15 @@ def build_html_body(subject: str, markdown_content: str) -> str:
     styled_html = styled_html.replace("<td>", '<td style="padding: 10px 12px; border-bottom: 1px solid #f1f5f9;">')
     
     # Bold and styling alerts
-    styled_html = styled_html.replace("<strong>BUY</strong>", '<span style="background: #ecfdf5; color: #10b981; padding: 2px 6px; border-radius: 12px; font-size: 0.75rem; font-weight: 700;">BUY</span>')
-    styled_html = styled_html.replace("<strong>SELL</strong>", '<span style="background: #fef2f2; color: #dc2626; padding: 2px 6px; border-radius: 12px; font-size: 0.75rem; font-weight: 700;">SELL</span>')
-    styled_html = styled_html.replace("<strong>HOLD</strong>", '<span style="background: #fffbeb; color: #d97706; padding: 2px 6px; border-radius: 12px; font-size: 0.75rem; font-weight: 700;">HOLD</span>')
-    styled_html = styled_html.replace("<strong>BULLISH</strong>", '<span style="background: #ecfdf5; color: #10b981; padding: 2px 6px; border-radius: 12px; font-size: 0.75rem; font-weight: 700;">BULLISH</span>')
-    styled_html = styled_html.replace("<strong>BEARISH</strong>", '<span style="background: #fef2f2; color: #ef4444; padding: 2px 6px; border-radius: 12px; font-size: 0.75rem; font-weight: 700;">BEARISH</span>')
+    styled_html = styled_html.replace("<strong>STRONG BUY</strong>", '<span style="background: #d1fae5; color: #065f46; padding: 2px 8px; border-radius: 12px; font-size: 0.72rem; font-weight: 800; white-space: nowrap;">STRONG BUY</span>')
+    styled_html = styled_html.replace("<strong>STRONG HOLD</strong>", '<span style="background: #fef3c7; color: #92400e; padding: 2px 8px; border-radius: 12px; font-size: 0.72rem; font-weight: 800; white-space: nowrap;">STRONG HOLD</span>')
+    styled_html = styled_html.replace("<strong>STRONG SELL</strong>", '<span style="background: #fee2e2; color: #991b1b; padding: 2px 8px; border-radius: 12px; font-size: 0.72rem; font-weight: 800; white-space: nowrap;">STRONG SELL</span>')
+    styled_html = styled_html.replace("<strong>BUY</strong>", '<span style="background: #ecfdf5; color: #10b981; padding: 2px 8px; border-radius: 12px; font-size: 0.72rem; font-weight: 800; white-space: nowrap;">BUY</span>')
+    styled_html = styled_html.replace("<strong>SELL</strong>", '<span style="background: #fef2f2; color: #dc2626; padding: 2px 8px; border-radius: 12px; font-size: 0.72rem; font-weight: 800; white-space: nowrap;">SELL</span>')
+    styled_html = styled_html.replace("<strong>HOLD</strong>", '<span style="background: #fffbeb; color: #d97706; padding: 2px 8px; border-radius: 12px; font-size: 0.72rem; font-weight: 800; white-space: nowrap;">HOLD</span>')
+    styled_html = styled_html.replace("<strong>IGNORE</strong>", '<span style="background: #f3f4f6; color: #374151; padding: 2px 8px; border-radius: 12px; font-size: 0.72rem; font-weight: 800; white-space: nowrap;">IGNORE</span>')
+    styled_html = styled_html.replace("<strong>BULLISH</strong>", '<span style="background: #ecfdf5; color: #10b981; padding: 2px 8px; border-radius: 12px; font-size: 0.72rem; font-weight: 800;">BULLISH</span>')
+    styled_html = styled_html.replace("<strong>BEARISH</strong>", '<span style="background: #fef2f2; color: #ef4444; padding: 2px 8px; border-radius: 12px; font-size: 0.72rem; font-weight: 800;">BEARISH</span>')
 
     # Format stock cards
     styled_html = format_stock_cards(styled_html)

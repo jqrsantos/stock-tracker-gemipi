@@ -47,7 +47,7 @@ When executed, the primary agent MUST orchestrate parallel subagents:
    - `bargain_hunter`: Focused on scanning indices and applying DCF models.
    - `company_news_agent`: Focused on crawling latest news catalysts.
 2. **Invoke Subagents:** Use `invoke_subagent` in parallel, passing each their context.
-3. **Execute Decision Engine:** Run the AHP-TOPSIS engine by running `python agent/skills/buffett_analyst/scripts/engine.py --holdings <owned_tickers_comma_separated>` capturing the ASCII matrix. To construct the `--holdings` argument, retrieve the portfolio JSON keys from `GET /portfolio/holdings` (which returns a dictionary like `{"AAPL": 10, "MSFT": 5}`), extract the ticker symbols, join them with commas (e.g. `AAPL,MSFT`), and pass them to `--holdings`.
+3. **Execute Decision Engine:** Run the AHP-TOPSIS engine with **live yfinance data** using: `uv run python agent/skills/buffett_analyst/scripts/engine.py --live --holdings <owned_tickers> --watchlist <bargain_tickers>`. To construct `--holdings`, retrieve portfolio JSON keys from `GET /portfolio/holdings` and join with commas. Pass the top 3 bargain tickers from the `bargain_hunter` to `--watchlist`. The `--live` flag fetches real fundamentals (ROIC, ROE, P/E, D/E, OperatingMargin, Price) directly from Yahoo Finance — never use mockup data in production runs.
 4. **Generate Report:** Compile outputs into `knowledge_base/daily_reports/YYYY-MM-DD-report.md`. Include sections:
    - `[MACRO DASHBOARD]`: Integrated US, EU, Japan economic/interest policies & geopolitical narratives.
    - `[DECISION MATRIX]`: Embed the engine ASCII table output inside a code block.

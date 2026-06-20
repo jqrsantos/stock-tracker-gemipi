@@ -1,10 +1,11 @@
 # agent/skills/buffett_analyst/scripts/engine.py
 import os
 import sys
+import time
 import argparse
 import pandas as pd
 import numpy as np
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 
 # RI values for Consistency Ratio calculation (indices 1 to 10)
 RI_VALUES = {1: 0.0, 2: 0.0, 3: 0.58, 4: 0.90, 5: 1.12, 6: 1.24, 7: 1.32, 8: 1.41, 9: 1.45, 10: 1.49}
@@ -106,9 +107,9 @@ def generate_action_matrix(df: pd.DataFrame, holdings: List[str]) -> pd.DataFram
         score = row['Score']
         owned = ticker in holdings_upper
         
-        if score >= 0.70:
+        if score >= 0.60:
             action = "STRONG HOLD" if owned else "STRONG BUY"
-        elif score <= 0.40:
+        elif score <= 0.20:
             action = "STRONG SELL" if owned else "IGNORE"
         else:
             action = "HOLD" if owned else "IGNORE"
@@ -160,15 +161,100 @@ def generate_ascii_table(df: pd.DataFrame, holdings: List[str]) -> str:
     lines.append(border)
     return "\n".join(lines)
 
+def fetch_live_data(tickers: List[str], delay: float = 1.0) -> Optional[pd.DataFrame]:
+    """
+    Fetches live fundamental data for each ticker via YFinanceFetcher.
+    Returns a DataFrame with columns: Ticker, ROIC, ROE, PE, DebtToEquity, OperatingMargin, Price.
+    Tickers that fail or return is_too_hard are skipped with a warning.
+    """
+    try:
+        # Import here to avoid hard dependency when running in CSV/mockup mode
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        if script_dir not in sys.path:
+            sys.path.insert(0, script_dir)
+        from data_fetcher import YFinanceFetcher
+    except ImportError as e:
+        print(f"Error: Could not import YFinanceFetcher: {e}")
+        return None
+
+    fetcher = YFinanceFetcher()
+    rows = []
+    failed = []
+
+    for ticker in tickers:
+        print(f"  Fetching live data: {ticker}...", flush=True)
+        stock = fetcher.fetch_data(ticker)
+        if stock is None:
+            print(f"  [SKIP] {ticker}: fetch returned None")
+            failed.append(ticker)
+            time.sleep(delay)
+            continue
+        # is_too_hard only blocks DCF valuation — fundamental metrics are still usable for TOPSIS
+        if stock.is_too_hard:
+            print(f"  [NOTE] {ticker}: DCF valuation unreliable ({stock.error_message}), but fundamentals included in TOPSIS matrix.")
+
+        # ROE is not directly in StockData; approximate from yfinance info
+        try:
+            import requests, yfinance as yf, urllib3
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+            session = requests.Session()
+            session.verify = False
+            session.headers['User-Agent'] = (
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'
+            )
+            info = yf.Ticker(ticker, session=session).info
+            roe = info.get('returnOnEquity')
+            if roe is None:
+                # If ROE is missing due to negative book equity, use ROA or ROIC as a proxy
+                roe = info.get('returnOnAssets') or stock.roic or 0.0
+            op_margin = info.get('operatingMargins') or 0.0
+        except Exception:
+            roe = 0.0
+            op_margin = 0.0
+
+        # Clamp metrics to reasonable bounds to prevent extreme outliers
+        # (e.g. AAPL negative book equity inflates ROIC to 5x+) from distorting TOPSIS
+        roic_clamped = round(min(max(stock.roic, -0.5), 0.5), 4)
+        roe_clamped = round(min(max(roe, -0.5), 0.5), 4)
+        pe_val = round(stock.current_pe, 2) if stock.current_pe > 0 else 999.0  # missing P/E → treat as expensive
+        de_clamped = round(min(stock.debt_to_equity, 10.0), 4)  # cap extreme leverage
+        op_margin_clamped = round(min(max(op_margin, -0.5), 0.5), 4)
+
+        rows.append({
+            'Ticker': ticker.upper(),
+            'ROIC': roic_clamped,
+            'ROE': roe_clamped,
+            'PE': pe_val,
+            'DebtToEquity': de_clamped,
+            'OperatingMargin': op_margin_clamped,
+            'Price': round(stock.current_price, 2),
+            'Currency': stock.currency,
+        })
+        time.sleep(delay)  # Respect rate limits
+
+    if failed:
+        print(f"\n[WARNING] Skipped {len(failed)} ticker(s) due to fetch errors: {', '.join(failed)}")
+
+    if not rows:
+        return None
+
+    return pd.DataFrame(rows)
+
+
 def main():
     parser = argparse.ArgumentParser(description="AHP-TOPSIS Portfolio Decision Engine")
-    parser.add_argument("--data-path", type=str, help="Path to csv containing stock data columns: Ticker, ROIC, ROE, PE, DebtToEquity, OperatingMargin")
+    parser.add_argument("--data-path", type=str, help="Path to CSV: Ticker, ROIC, ROE, PE, DebtToEquity, OperatingMargin")
     parser.add_argument("--holdings", type=str, default="", help="Comma-separated list of currently owned tickers")
+    parser.add_argument("--watchlist", type=str, default="", help="Comma-separated list of watchlist/bargain candidate tickers")
+    parser.add_argument("--live", action="store_true", help="Fetch live fundamental data from Yahoo Finance via yfinance")
     args = parser.parse_args()
-    
-    # 1. Define standard criteria weights (AHP reciprocal matrix)
-    # Order: ROIC, ROE, PE (non-beneficial), DebtToEquity (non-beneficial), OperatingMargin
-    # Default consistent Buffett-weighted matrix
+
+    holdings_list = [t.strip().upper() for t in args.holdings.split(",") if t.strip()]
+    watchlist_list = [t.strip().upper() for t in args.watchlist.split(",") if t.strip()]
+    all_tickers = list(dict.fromkeys(holdings_list + watchlist_list))  # preserve order, deduplicate
+
+    # 1. AHP weights
     pairwise = np.array([
         [1.0, 2.0, 4.0, 3.0, 2.0],
         [0.5, 1.0, 3.0, 2.0, 1.0],
@@ -176,11 +262,23 @@ def main():
         [0.33, 0.5, 2.0, 1.0, 0.5],
         [0.5, 1.0, 3.0, 2.0, 1.0]
     ])
-    
     weights = get_ahp_weights(pairwise)
-        
+
     # 2. Ingest Data
-    if args.data_path:
+    if args.live:
+        if not all_tickers:
+            print("Error: --live requires at least one ticker via --holdings or --watchlist.")
+            sys.exit(1)
+        print(f"Fetching live yfinance data for: {', '.join(all_tickers)}\n")
+        df = fetch_live_data(all_tickers)
+        if df is None or df.empty:
+            print("Error: Live data fetch returned no usable results. Check network/SSL.")
+            sys.exit(1)
+        # Update holdings_list to only include tickers that successfully fetched
+        fetched_tickers = set(df['Ticker'].str.upper())
+        holdings_list = [t for t in holdings_list if t in fetched_tickers]
+        print(f"\nLive data loaded for {len(df)} ticker(s).\n")
+    elif args.data_path:
         if not os.path.exists(args.data_path):
             print(f"Error: Data path '{args.data_path}' does not exist.")
             sys.exit(1)
@@ -190,7 +288,8 @@ def main():
             print(f"Error: Failed to read CSV file: {e}")
             sys.exit(1)
     else:
-        # Load a default mockup CSV dataset
+        # Mockup fallback
+        print("[INFO] No --live flag or --data-path provided. Using built-in mockup dataset.")
         mockup_data = {
             "Ticker": ["AAPL", "MSFT", "KO", "HPQ", "INTC"],
             "ROIC": [0.245, 0.221, 0.192, 0.084, 0.045],
@@ -200,34 +299,55 @@ def main():
             "OperatingMargin": [0.284, 0.354, 0.251, 0.082, 0.041]
         }
         df = pd.DataFrame(mockup_data)
-        
+
     # Schema Validation
     required_columns = ['Ticker', 'ROIC', 'ROE', 'PE', 'DebtToEquity', 'OperatingMargin']
     missing_columns = [col for col in required_columns if col not in df.columns]
     if missing_columns:
-        print(f"Error: The input data is missing required columns: {missing_columns}")
+        print(f"Error: Input data is missing required columns: {missing_columns}")
         sys.exit(1)
-        
-    # Standardize column extraction
-    tickers = df['Ticker'].tolist()
-    criteria_matrix = df[['ROIC', 'ROE', 'PE', 'DebtToEquity', 'OperatingMargin']].to_numpy()
-    
-    # Beneficial boolean mapping matching our criteria order
+    criteria_matrix = df[['ROIC', 'ROE', 'PE', 'DebtToEquity', 'OperatingMargin']].to_numpy(dtype=float)
     beneficial = [True, True, False, False, True]
-    
+
     # 3. Calculate scores
     scores = run_topsis(criteria_matrix, weights, beneficial)
     df['Score'] = scores
-    
-    # Sort descending by score
     df = df.sort_values(by='Score', ascending=False).reset_index(drop=True)
-    
+
     # 4. Map actions
-    holdings_list = [t.strip().upper() for t in args.holdings.split(",") if t.strip()]
     df = generate_action_matrix(df, holdings_list)
-    
+
     # 5. Output
-    print(generate_ascii_table(df, holdings_list))
+    # Show live price column if available
+    if 'Price' in df.columns:
+        df_display = df.copy()
+        df_display['Status'] = df_display['Ticker'].apply(
+            lambda t: 'Owned' if str(t).upper() in [h.upper() for h in holdings_list] else 'Watchlist'
+        )
+        holdings_upper = [h.upper() for h in holdings_list]
+        w_ticker = max(6, df_display['Ticker'].astype(str).str.len().max())
+        w_price = 12
+        w_status = max(10, df_display['Status'].astype(str).str.len().max())
+        w_score = 12
+        w_action = max(13, df_display['Matrix Action'].astype(str).str.len().max())
+        border = f"+-{'-'*w_ticker}-+-{'-'*w_price}-+-{'-'*w_status}-+-{'-'*w_score}-+-{'-'*w_action}-+"
+        header = (f"| {'Ticker':<{w_ticker}} | {'Price (USD)':<{w_price}} "
+                  f"| {'Status':<{w_status}} | {'TOPSIS Score':<{w_score}} | {'Matrix Action':<{w_action}} |")
+        lines = [border, header, border]
+        for _, row in df_display.iterrows():
+            price_str = f"{row['Price']:.2f}" if pd.notna(row.get('Price')) else 'N/A'
+            lines.append(
+                f"| {str(row['Ticker']):<{w_ticker}} "
+                f"| {price_str:<{w_price}} "
+                f"| {str(row['Status']):<{w_status}} "
+                f"| {row['Score']:.4f}       "
+                f"| {str(row['Matrix Action']):<{w_action}} |"
+            )
+        lines.append(border)
+        print('\n'.join(lines))
+    else:
+        print(generate_ascii_table(df, holdings_list))
+
 
 if __name__ == "__main__":
     main()

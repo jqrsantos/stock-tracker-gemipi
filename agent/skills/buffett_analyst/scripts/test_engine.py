@@ -1,5 +1,6 @@
 # agent/skills/buffett_analyst/scripts/test_engine.py
 import unittest
+from unittest.mock import patch, MagicMock
 import numpy as np
 import pandas as pd
 import sys
@@ -92,14 +93,14 @@ class TestEngine(unittest.TestCase):
     def test_generate_action_matrix(self):
         df = pd.DataFrame({
             'Ticker': ['AAPL', 'MSFT', 'KO'],
-            'Score': [0.85, 0.55, 0.25]
+            'Score': [0.85, 0.55, 0.15]
         })
         holdings = ['AAPL', 'KO']
         
         result_df = generate_action_matrix(df, holdings)
-        # AAPL: owned, score >= 0.70 -> STRONG HOLD
-        # MSFT: not owned, score between 0.40 and 0.70 -> IGNORE
-        # KO: owned, score <= 0.40 -> STRONG SELL
+        # AAPL: owned, score >= 0.60 -> STRONG HOLD
+        # MSFT: not owned, score < 0.60 -> IGNORE
+        # KO: owned, score <= 0.20 -> STRONG SELL
         
         self.assertEqual(result_df.loc[result_df['Ticker'] == 'AAPL', 'Matrix Action'].values[0], 'STRONG HOLD')
         self.assertEqual(result_df.loc[result_df['Ticker'] == 'MSFT', 'Matrix Action'].values[0], 'IGNORE')
@@ -117,6 +118,80 @@ class TestEngine(unittest.TestCase):
         self.assertIn("MSFT", table)
         self.assertIn("STRONG HOLD", table)
         self.assertIn("IGNORE", table)
+
+    @patch('yfinance.Ticker')
+    @patch('data_fetcher.YFinanceFetcher')
+    def test_fetch_live_data_clamping(self, mock_fetcher_cls, mock_ticker_cls):
+        # Create a mock StockData object
+        mock_stock = MagicMock()
+        mock_stock.ticker = 'AAPL'
+        mock_stock.roic = 0.8228
+        mock_stock.current_pe = 36.12
+        mock_stock.debt_to_equity = 1.3380
+        mock_stock.current_price = 298.01
+        mock_stock.currency = 'USD'
+        mock_stock.is_too_hard = False
+        mock_stock.error_message = ''
+        
+        # Configure mock fetcher instance
+        mock_fetcher = mock_fetcher_cls.return_value
+        mock_fetcher.fetch_data.return_value = mock_stock
+        
+        # Configure mock yf.Ticker info
+        mock_ticker = mock_ticker_cls.return_value
+        mock_ticker.info = {
+            'returnOnEquity': 1.4147,
+            'operatingMargins': 0.3227
+        }
+        
+        from engine import fetch_live_data
+        df = fetch_live_data(['AAPL'], delay=0.0)
+        
+        self.assertIsNotNone(df)
+        self.assertEqual(len(df), 1)
+        row = df.iloc[0]
+        self.assertEqual(row['Ticker'], 'AAPL')
+        # Check clamping (capped to 0.5)
+        self.assertEqual(row['ROIC'], 0.5)
+        self.assertEqual(row['ROE'], 0.5)
+        self.assertEqual(row['PE'], 36.12)
+        self.assertEqual(row['DebtToEquity'], 1.3380)
+        self.assertEqual(row['OperatingMargin'], 0.3227)
+        self.assertEqual(row['Price'], 298.01)
+
+    @patch('yfinance.Ticker')
+    @patch('data_fetcher.YFinanceFetcher')
+    def test_fetch_live_data_missing_roe(self, mock_fetcher_cls, mock_ticker_cls):
+        # Create a mock StockData object
+        mock_stock = MagicMock()
+        mock_stock.ticker = 'BKNG'
+        mock_stock.roic = 0.4873
+        mock_stock.current_pe = 22.66
+        mock_stock.debt_to_equity = 0.1449
+        mock_stock.current_price = 171.78
+        mock_stock.currency = 'USD'
+        mock_stock.is_too_hard = False
+        
+        mock_fetcher = mock_fetcher_cls.return_value
+        mock_fetcher.fetch_data.return_value = mock_stock
+        
+        # returnOnEquity is missing (None) in info
+        mock_ticker = mock_ticker_cls.return_value
+        mock_ticker.info = {
+            'returnOnEquity': None,
+            'returnOnAssets': 0.2226,
+            'operatingMargins': 0.2504
+        }
+        
+        from engine import fetch_live_data
+        df = fetch_live_data(['BKNG'], delay=0.0)
+        
+        self.assertIsNotNone(df)
+        self.assertEqual(len(df), 1)
+        row = df.iloc[0]
+        # ROE should fall back to returnOnAssets (0.2226)
+        self.assertEqual(row['ROE'], 0.2226)
+        self.assertEqual(row['ROIC'], 0.4873)
 
 if __name__ == '__main__':
     unittest.main()

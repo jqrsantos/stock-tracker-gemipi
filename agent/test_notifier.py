@@ -63,7 +63,7 @@ Another paragraph.
     assert 'style="font-size: 1.15rem; font-weight: 700; color: #1e293b; margin-top: 24px; margin-bottom: 12px; text-align: left;"' in html_body
     
     # Check pre styling for code block
-    assert 'style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; font-family: monospace; font-size: 0.85rem; line-height: 1.4; overflow-x: auto; margin-bottom: 24px; text-align: left;"' in html_body
+    assert 'style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.82rem; line-height: 1.35; overflow-x: auto; margin-bottom: 24px; text-align: left; color: #0f172a; white-space: pre;"' in html_body
 
 def test_extract_tldr_decimal_splitting():
     markdown_content = """

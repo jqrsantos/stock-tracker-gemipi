@@ -72,7 +72,6 @@ def extract_tldr(markdown_text: str) -> str:
       </ul>
     </div>
     """
-
 def format_stock_cards(html_content: str) -> str:
     """
     Parses generated stock metrics blocks into separate compact visual cards with left border accents.
@@ -83,8 +82,9 @@ def format_stock_cards(html_content: str) -> str:
     # * **Debt/Equity**: value
     # * **FCF Yield**: value
     # * **Valuation**: value
+    # * **Comment**: value (optional)
     # Supports optional bullet points (* or -), optional bold tags (**), and spaces/newlines.
-    stock_pattern = r'<h3>([A-Z0-9\-\.]+)\s*\((.*?)\)\s*-\s*(STRONG BUY|STRONG HOLD|STRONG SELL|BUY|HOLD|SELL)<\/h3>\s*<ul>\s*<li>(?:<strong>)?ROIC(?:<\/strong>)?:?\s*(.*?)<\/li>\s*<li>(?:<strong>)?Debt/Equity(?:<\/strong>)?:?\s*(.*?)<\/li>\s*<li>(?:<strong>)?FCF Yield(?:<\/strong>)?:?\s*(.*?)<\/li>\s*<li>(?:<strong>)?Valuation(?:<\/strong>)?:?\s*(.*?)<\/li>\s*<\/ul>'
+    stock_pattern = r'<h3>([A-Z0-9\-\.]+)\s*\((.*?)\)\s*-\s*(STRONG BUY|STRONG HOLD|STRONG SELL|BUY|HOLD|SELL)<\/h3>\s*<ul>\s*<li>(?:<strong>)?ROIC(?:<\/strong>)?:?\s*(.*?)<\/li>\s*<li>(?:<strong>)?Debt/Equity(?:<\/strong>)?:?\s*(.*?)<\/li>\s*<li>(?:<strong>)?FCF Yield(?:<\/strong>)?:?\s*(.*?)<\/li>\s*<li>(?:<strong>)?Valuation(?:<\/strong>)?:?\s*(.*?)<\/li>\s*(?:<li>(?:<strong>)?Comment(?:<\/strong>)?:?\s*(.*?)<\/li>\s*)?<\/ul>'
     
     def replace_with_card(match):
         ticker = match.group(1).strip()
@@ -94,6 +94,7 @@ def format_stock_cards(html_content: str) -> str:
         de = match.group(5).strip()
         fcf = match.group(6).strip()
         val = match.group(7).strip()
+        comment = match.group(8).strip() if (len(match.groups()) >= 8 and match.group(8) is not None) else ""
         
         # Color mapping
         border_color = "#3b82f6"  # Blue default
@@ -112,6 +113,16 @@ def format_stock_cards(html_content: str) -> str:
             border_color = "#d97706"  # Amber
             bg_status = "#fffbeb"
             text_status = "#d97706"
+            
+        comment_row = ""
+        if comment:
+            comment_row = f"""
+            <tr>
+              <td colspan="2" style="padding: 10px 0 0 0; border-top: 1px dashed #e2e8f0; color: #475569; font-size: 0.78rem; font-style: italic; line-height: 1.35; text-align: left;">
+                <span style="font-weight: 700; color: #475569;">Note:</span> {comment}
+              </td>
+            </tr>
+            """
             
         return f"""
         <div style="background: #ffffff; border: 1px solid #e2e8f0; border-left: 5px solid {border_color}; border-radius: 8px; padding: 18px 22px; margin-bottom: 28px; max-width: 360px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
@@ -140,6 +151,7 @@ def format_stock_cards(html_content: str) -> str:
               <td style="padding: 5px 0; color: #64748b; text-align: left;">Valuation</td>
               <td style="padding: 5px 0; text-align: right; font-weight: 700; color: {border_color};">{val}</td>
             </tr>
+            {comment_row}
           </table>
         </div>
         """
@@ -174,8 +186,9 @@ def build_html_body(subject: str, markdown_content: str) -> str:
     # Style <p> tags
     styled_html = styled_html.replace("<p>", '<p style="margin-bottom: 16px; line-height: 1.8; text-align: left;">')
 
-    # Style <pre> block to format the AHP-TOPSIS ASCII table properly
-    styled_html = styled_html.replace("<pre>", '<pre style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; font-family: monospace; font-size: 0.85rem; line-height: 1.4; overflow-x: auto; margin-bottom: 24px; text-align: left;">')
+    # Style <pre><code> block to format the AHP-TOPSIS ASCII table properly with monospace
+    styled_html = styled_html.replace("<pre><code>", '<pre style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.82rem; line-height: 1.35; overflow-x: auto; margin-bottom: 24px; text-align: left; color: #0f172a; white-space: pre;"><code style="font-family: inherit; font-size: inherit; color: inherit; background: none; border: none; padding: 0; margin: 0; white-space: inherit;">')
+    styled_html = styled_html.replace("</code></pre>", '</code></pre>')
 
     # Styled sections
     styled_html = re.sub(r'<h3>(.*?)</h3>', r'<h3 style="font-size: 1.15rem; font-weight: 700; color: #1e293b; margin-top: 24px; margin-bottom: 12px; text-align: left;">\1</h3>', styled_html)

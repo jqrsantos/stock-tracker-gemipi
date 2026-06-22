@@ -311,8 +311,8 @@ class TestYFinanceFetcherMocked(unittest.TestCase):
             "industry": "Software",
             "currentPrice": 50.0,
             "currency": "USD",
-            "trailingPE": 15.0,
-            "fiveYearAvgPE": 15.0,
+            "trailingPE": 40.0,
+            "fiveYearAvgPE": 40.0,
             "sharesOutstanding": 1000000,
             "marketCap": 50000000
         }

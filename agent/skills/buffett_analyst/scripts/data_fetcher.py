@@ -7,6 +7,7 @@ Computes true Warren Buffett investing metrics: ROIC, Debt/Equity, FCF Yield, an
 import logging
 import sys
 import math
+import statistics
 import yfinance as yf
 import pandas as pd
 from dataclasses import dataclass
@@ -77,6 +78,23 @@ class YFinanceFetcher:
                 except (ValueError, TypeError):
                     pass
         return default
+
+    def safe_get_series(self, df, keys: List[str]) -> pd.Series:
+        """
+        Safely retrieves all annual values for given keys in a DataFrame.
+        """
+        if df is None or df.empty:
+            return pd.Series(dtype=float)
+        for key in keys:
+            if key in df.index:
+                val = df.loc[key]
+                if isinstance(val, pd.DataFrame):
+                    val = val.iloc[0]
+                if isinstance(val, pd.Series):
+                    return pd.to_numeric(val, errors='coerce').fillna(0.0)
+                else:
+                    return pd.Series([float(val)], index=[0])
+        return pd.Series(dtype=float)
 
     def calculate_dcf_value(self, growth_rate: float, fcf_base: float, shares: float, discount_rate: float = 0.10, terminal_growth: float = 0.02) -> float:
         """
@@ -179,35 +197,49 @@ class YFinanceFetcher:
             cashflow = yf_ticker.cashflow
             income_stmt = yf_ticker.income_stmt
             
-            # 1. NOPAT Calculation
-            ebit = self.safe_get_row(income_stmt, ['EBIT', 'OperatingIncome', 'Operating Income'])
-            tax_provision = self.safe_get_row(income_stmt, ['TaxProvision', 'Tax Provision', 'IncomeTaxExpense'])
-            pretax_income = self.safe_get_row(income_stmt, ['PretaxIncome', 'Pre-Tax Income', 'Pretax Income'])
-            
-            effective_tax_rate = 0.21
-            if pretax_income > 0 and tax_provision > 0:
-                effective_tax_rate = tax_provision / pretax_income
-                if effective_tax_rate < 0 or effective_tax_rate > 0.8:
-                    effective_tax_rate = 0.21
-                    
-            nopat = ebit * (1 - effective_tax_rate)
-            
-            # 2. Invested Capital Calculation
+            # Current Year values for reporting
             equity = self.safe_get_row(balance_sheet, ['StockholdersEquity', 'TotalStockholdersEquity', 'Stockholders Equity', 'Total Stockholders Equity'])
             debt = self.safe_get_row(balance_sheet, ['TotalDebt', 'Total Debt'])
             if debt == 0.0:
                 lt_debt = self.safe_get_row(balance_sheet, ['LongTermDebt', 'Long Term Debt'])
                 st_debt = self.safe_get_row(balance_sheet, ['ShortLongTermDebt', 'Short Long Term Debt'])
                 debt = lt_debt + st_debt
-                
-            cash = self.safe_get_row(balance_sheet, ['CashAndCashEquivalents', 'Cash And Cash Equivalents', 'Cash'])
             
-            invested_capital = equity + debt - cash
-            if invested_capital <= 0:
-                fallback_ic = max(equity + debt, 1.0)
-                roic = nopat / fallback_ic
-            else:
-                roic = nopat / invested_capital
+            # 2.5. Multi-Year ROIC Calculation (Insulated)
+            ebit_series = self.safe_get_series(income_stmt, ['EBIT', 'OperatingIncome', 'Operating Income'])
+            tax_series = self.safe_get_series(income_stmt, ['TaxProvision', 'Tax Provision', 'IncomeTaxExpense'])
+            pretax_series = self.safe_get_series(income_stmt, ['PretaxIncome', 'Pre-Tax Income', 'Pretax Income'])
+            equity_series = self.safe_get_series(balance_sheet, ['StockholdersEquity', 'TotalStockholdersEquity', 'Stockholders Equity', 'Total Stockholders Equity'])
+            debt_series = self.safe_get_series(balance_sheet, ['TotalDebt', 'Total Debt'])
+            lt_debt_series = self.safe_get_series(balance_sheet, ['LongTermDebt', 'Long Term Debt'])
+            st_debt_series = self.safe_get_series(balance_sheet, ['ShortLongTermDebt', 'Short Long Term Debt'])
+            cash_series = self.safe_get_series(balance_sheet, ['CashAndCashEquivalents', 'Cash And Cash Equivalents', 'Cash'])
+
+            df_align = pd.DataFrame({
+                'ebit': ebit_series, 'tax': tax_series, 'pretax': pretax_series,
+                'equity': equity_series, 'debt': debt_series, 'lt_debt': lt_debt_series,
+                'st_debt': st_debt_series, 'cash': cash_series
+            }).fillna(0.0)
+
+            roic_history = []
+            for _, row in df_align.head(5).iterrows():
+                row_tax_rate = 0.21
+                if row['pretax'] > 0 and row['tax'] > 0:
+                    row_tax_rate = row['tax'] / row['pretax']
+                    if row_tax_rate < 0 or row_tax_rate > 0.8:
+                        row_tax_rate = 0.21
+                
+                row_nopat = row['ebit'] * (1 - row_tax_rate)
+                row_debt = row['debt'] if row['debt'] != 0.0 else (row['lt_debt'] + row['st_debt'])
+                row_ic = row['equity'] + row_debt - row['cash']
+                
+                if row_ic <= 0 or row['equity'] <= 0:
+                    fallback_ic = max(row['equity'] + row_debt, 1.0)
+                    roic_history.append(row_nopat / fallback_ic)
+                else:
+                    roic_history.append(row_nopat / row_ic)
+
+            roic = statistics.median(roic_history) if roic_history else 0.0
             
             # 3. Debt to Equity
             if equity > 0:
@@ -304,10 +336,10 @@ class YFinanceFetcher:
                     bargain_price = 0.0
                     fair_price = 0.0
                     expensive_price = 0.0
-                elif len(fcf_history) >= 2 and fcf_history[0] < fcf_history[-1]:
+                elif statistics.median(fcf_history[:5]) < 0:
                     intrinsic_value = 0.0
                     is_too_hard = True
-                    error_msg = "Declining FCF growth: Too Hard to value reliably using DCF"
+                    error_msg = "Negative multi-year median FCF: Too Hard to value reliably using DCF"
                     bargain_price = 0.0
                     fair_price = 0.0
                     expensive_price = 0.0
@@ -394,34 +426,43 @@ class YFinanceFetcher:
                     bargain_price = 0.0
                     fair_price = 0.0
                     expensive_price = 0.0
-                elif len(fcf_history) >= 2 and fcf_history[0] < fcf_history[-1]:
+                elif statistics.median(fcf_history[:5]) < 0:
                     intrinsic_value = 0.0
                     is_too_hard = True
-                    error_msg = "Declining FCF growth: Too Hard to value reliably using DCF"
+                    error_msg = "Negative multi-year median FCF: Too Hard to value reliably"
                     bargain_price = 0.0
                     fair_price = 0.0
                     expensive_price = 0.0
                 else:
-                    # Dynamic growth rate calculation
-                    growth_rate = 0.08  # standard 8% conservative growth
-                    if len(fcf_history) >= 2:
-                        hist = fcf_history[::-1] # Clean newest to oldest
-                        if hist[0] > 0 and hist[-1] > 0:
-                            n_years = len(hist) - 1
-                            cagr = (hist[-1] / hist[0]) ** (1 / n_years) - 1
-                            if 0.0 <= cagr < 0.20:
-                                growth_rate = cagr
-                            elif cagr >= 0.20:
-                                growth_rate = 0.15  # cap growth at 15% to be conservative
-                    
-                    expected_growth_rate = growth_rate
-                    discount_rate = 0.10  # standard discount rate
-                    terminal_growth = 0.02  # standard terminal growth rate
-                    
-                    intrinsic_value = self.calculate_dcf_value(growth_rate, fcf_history[0], shares, discount_rate, terminal_growth)
-                    bargain_price = intrinsic_value * 0.70
-                    fair_price = intrinsic_value
-                    expensive_price = intrinsic_value * 1.20
+                    historical_median = statistics.median(fcf_history[:5])
+                    if fcf_history[0] < 0.80 * historical_median:
+                        valuation_methodology = "Mid-Cycle Normalized"
+                        normalized_fcf = historical_median
+                        intrinsic_value = (normalized_fcf * 15) / shares
+                        bargain_price = intrinsic_value * 0.70
+                        fair_price = intrinsic_value
+                        expensive_price = intrinsic_value * 1.20
+                    else:
+                        # Dynamic growth rate calculation
+                        growth_rate = 0.08  # standard 8% conservative growth
+                        if len(fcf_history) >= 2:
+                            hist = fcf_history[::-1] # Clean newest to oldest
+                            if hist[0] > 0 and hist[-1] > 0:
+                                n_years = len(hist) - 1
+                                cagr = (hist[-1] / hist[0]) ** (1 / n_years) - 1
+                                if 0.0 <= cagr < 0.20:
+                                    growth_rate = cagr
+                                elif cagr >= 0.20:
+                                    growth_rate = 0.15  # cap growth at 15% to be conservative
+                        
+                        expected_growth_rate = growth_rate
+                        discount_rate = 0.10  # standard discount rate
+                        terminal_growth = 0.02  # standard terminal growth rate
+                        
+                        intrinsic_value = self.calculate_dcf_value(growth_rate, fcf_history[0], shares, discount_rate, terminal_growth)
+                        bargain_price = intrinsic_value * 0.70
+                        fair_price = intrinsic_value
+                        expensive_price = intrinsic_value * 1.20
             
             return StockData(
                 ticker=ticker,

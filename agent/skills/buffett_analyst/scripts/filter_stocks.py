@@ -57,9 +57,12 @@ class BuffettQuantitativeFilter:
             if stock.fcf_yield <= self.min_fcf_yield:
                 continue
 
-            # 5. P/E < 5-year average
+            # 5. P/E < 5-year average (Bypass if experiencing a Temporary Earnings Depression)
             if stock.pe_5yr_avg > 0.0 and stock.current_pe >= stock.pe_5yr_avg:
-                continue
+                if stock.roic > 0.15 and stock.fcf_yield > 0.05:
+                    logger.info(f"Temporary Earnings Depression: Bypassing P/E exclusion for {stock.ticker} (ROIC = {stock.roic*100:.1f}%, FCF Yield = {stock.fcf_yield*100:.1f}%)")
+                else:
+                    continue
 
             filtered_stocks.append(stock)
             logger.info(f"Bargain identified: {stock.ticker} ({stock.name})")

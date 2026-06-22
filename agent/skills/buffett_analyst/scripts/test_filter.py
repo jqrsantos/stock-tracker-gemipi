@@ -68,19 +68,39 @@ class TestBuffettFilter(unittest.TestCase):
         results = self.filter.filter([low_fcf])
         self.assertEqual(len(results), 0)
 
-    def test_exclude_high_pe(self):
-        """Tests exclusion when current P/E is higher than 5-year average."""
-        high_pe = StockData(
+    def test_pe_exclusion_bypass(self):
+        """Tests that P/E exclusion is bypassed if ROIC > 15% and FCF yield > 5%."""
+        high_pe_good_metrics = StockData(
             ticker="EXPENSIVE",
             name="Expensive Co",
             industry="Tech",
-            roic=0.20,
+            roic=0.20,           # > 0.15
+            debt_to_equity=0.5,
+            fcf_yield=0.07,      # > 0.05
+            current_pe=25.0,     # > 20.0
+            pe_5yr_avg=20.0
+        )
+        with self.assertLogs('filter_stocks', level='INFO') as log_capture:
+            results = self.filter.filter([high_pe_good_metrics])
+        
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].ticker, "EXPENSIVE")
+        log_found = any("Temporary Earnings Depression: Bypassing P/E exclusion for EXPENSIVE" in msg for msg in log_capture.output)
+        self.assertTrue(log_found, "Bypass log message not found")
+
+    def test_exclude_high_pe_no_bypass(self):
+        """Tests exclusion when current P/E is higher than 5-year avg and metrics don't meet bypass criteria."""
+        high_pe_bad_metrics = StockData(
+            ticker="TRULY_EXPENSIVE",
+            name="Truly Expensive Co",
+            industry="Tech",
+            roic=0.10,           # <= 0.15, so bypass fails
             debt_to_equity=0.5,
             fcf_yield=0.07,
             current_pe=25.0,     # > 20.0
             pe_5yr_avg=20.0
         )
-        results = self.filter.filter([high_pe])
+        results = self.filter.filter([high_pe_bad_metrics])
         self.assertEqual(len(results), 0)
 
     def test_pe_5yr_avg_zero(self):

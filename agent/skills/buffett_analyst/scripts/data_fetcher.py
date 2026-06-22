@@ -329,7 +329,7 @@ class YFinanceFetcher:
             # 1. CATEGORY: Hyper-Growth / Tech Platform
             if ticker in ["NVDA", "MSFT", "NOW", "AAPL", "AMZN", "META", "GOOGL", "NFLX"] or (roic > 0.15 and current_pe > 30):
                 valuation_methodology = "Reverse DCF"
-                if not fcf_history or fcf_history[0] <= 0 or current_price <= 0 or shares <= 0:
+                if not fcf_history or current_price <= 0 or shares <= 0:
                     intrinsic_value = current_price
                     is_too_hard = True
                     error_msg = "Insufficient FCF or price data for Reverse DCF"
@@ -419,7 +419,7 @@ class YFinanceFetcher:
             # 3. CATEGORY: Mature & Stable (Standard 10-Yr DCF)
             else:
                 valuation_methodology = "Standard DCF"
-                if not fcf_history or fcf_history[0] <= 0 or current_price <= 0 or shares <= 0:
+                if not fcf_history or current_price <= 0 or shares <= 0:
                     intrinsic_value = 0.0
                     is_too_hard = True
                     error_msg = "Erratic or negative FCF: Too Hard to value reliably"

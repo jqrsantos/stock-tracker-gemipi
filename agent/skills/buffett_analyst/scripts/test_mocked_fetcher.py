@@ -255,5 +255,47 @@ class TestYFinanceFetcherMocked(unittest.TestCase):
         self.assertIsNotNone(data)
         self.assertEqual(data.expected_growth_rate, 0.0)
 
+    @patch('yfinance.Ticker')
+    def test_fetch_recent_negative_fcf_allowed(self, mock_ticker_class):
+        """
+        Verify that a stock with negative recent FCF but positive multi-year median FCF
+        is not marked as Too Hard, but instead valued appropriately.
+        """
+        mock_ticker = MagicMock()
+        mock_ticker_class.return_value = mock_ticker
+        
+        mock_ticker.info = {
+            "longName": "Temporary Hiccup Corp",
+            "industry": "Software",
+            "currentPrice": 50.0,
+            "currency": "USD",
+            "trailingPE": 15.0,
+            "fiveYearAvgPE": 15.0,
+            "sharesOutstanding": 1000000,
+            "marketCap": 50000000
+        }
+        
+        # FCF: [-10M, 40M, 50M] -> Median is 40M, recent is -10M.
+        mock_ticker.cashflow = pd.DataFrame(
+            [[-10000000, 40000000, 50000000], [-10000000, 40000000, 50000000]], 
+            index=["FreeCashFlow", "FreeCashFlow"],
+            columns=["2023-12-31", "2022-12-31", "2021-12-31"]
+        )
+        mock_ticker.balance_sheet = pd.DataFrame(
+            [[30000000, 30000000, 30000000], [10000000, 10000000, 10000000], [5000000, 5000000, 5000000]],
+            index=["StockholdersEquity", "TotalDebt", "CashAndCashEquivalents"],
+            columns=["2023-12-31", "2022-12-31", "2021-12-31"]
+        )
+        mock_ticker.income_stmt = pd.DataFrame(
+            [[10000000, 10000000, 10000000], [2100000, 2100000, 2100000], [10000000, 10000000, 10000000]],
+            index=["EBIT", "TaxProvision", "PretaxIncome"],
+            columns=["2023-12-31", "2022-12-31", "2021-12-31"]
+        )
+        
+        data = self.fetcher.fetch_data("HICCUP")
+        self.assertIsNotNone(data)
+        # Should not be 'too hard' simply due to recent negative FCF
+        self.assertFalse(data.is_too_hard)
+
 if __name__ == "__main__":
     unittest.main()

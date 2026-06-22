@@ -73,34 +73,98 @@ def extract_tldr(markdown_text: str) -> str:
     </div>
     """
 def format_stock_cards(html_content: str) -> str:
-    """
-    Parses generated stock metrics blocks into separate compact visual cards with left border accents.
-    """
-    # Matches:
-    # ### Ticker (Company Name) - STATUS
-    # * **ROIC**: value
-    # * **Debt/Equity**: value
-    # * **FCF Yield**: value
-    # * **Valuation**: value
-    # * **Comment**: value (optional)
-    # Supports optional bullet points (* or -), optional bold tags (**), and spaces/newlines.
-    stock_pattern = r'<h3>([A-Z0-9\-\.]+)\s*\((.*?)\)\s*-\s*(STRONG BUY|STRONG HOLD|STRONG SELL|BUY|HOLD|SELL)<\/h3>\s*<ul>\s*<li>(?:<strong>)?ROIC(?:<\/strong>)?:?\s*(.*?)<\/li>\s*<li>(?:<strong>)?Debt/Equity(?:<\/strong>)?:?\s*(.*?)<\/li>\s*<li>(?:<strong>)?FCF Yield(?:<\/strong>)?:?\s*(.*?)<\/li>\s*<li>(?:<strong>)?Valuation(?:<\/strong>)?:?\s*(.*?)<\/li>\s*(?:<li>(?:<strong>)?Comment(?:<\/strong>)?:?\s*(.*?)<\/li>\s*)?<\/ul>'
+    # Match any <h3>...</h3> followed by <ul>...</ul> block
+    # We use a pattern that allows arbitrary formatting, newlines, and optional paragraphs in between.
+    pattern = r'<h3>(.*?)</h3>\s*(?:<p>.*?</p>\s*)?<ul>\s*(.*?)\s*</ul>'
     
     def replace_with_card(match):
-        ticker = match.group(1).strip()
-        name = match.group(2).strip()
-        status = match.group(3).upper()
-        roic = match.group(4).strip()
-        de = match.group(5).strip()
-        fcf = match.group(6).strip()
-        val = match.group(7).strip()
-        comment = match.group(8).strip() if (len(match.groups()) >= 8 and match.group(8) is not None) else ""
+        header_text = match.group(1).strip()
+        ul_content = match.group(2).strip()
         
-        # Color mapping
+        # Check if this is a stock health card by verifying if ROIC is mentioned in the list
+        if "ROIC" not in ul_content and "roic" not in ul_content.lower():
+            return match.group(0) # Keep original HTML unchanged
+            
+        # 1. Parse header
+        # Check if header is of form: AAPL (Apple Inc) - BUY
+        ticker = ""
+        name = ""
+        status = ""
+        
+        orig_match = re.match(r'^([A-Z0-9\-\.]+)\s*\((.*?)\)\s*-\s*(STRONG BUY|STRONG HOLD|STRONG SELL|BUY|HOLD|SELL)$', header_text, re.IGNORECASE)
+        if orig_match:
+            ticker = orig_match.group(1).strip()
+            name = orig_match.group(2).strip()
+            status = orig_match.group(3).upper()
+        else:
+            # Maybe it is: AAPL — Apple Inc.
+            parts = re.split(r'\s*(?:[\u2014\u2013]|-)\s*', header_text)
+            if len(parts) >= 2:
+                ticker = parts[0].strip()
+                name = parts[1].strip()
+            else:
+                ticker = header_text
+                name = ""
+                
+        # 2. Parse list items
+        # Find all <li>...</li> blocks
+        li_items = re.findall(r'<li>(.*?)</li>', ul_content, re.DOTALL)
+        
+        roic = "N/A"
+        de = "N/A"
+        fcf = "N/A"
+        val = "N/A"
+        comment = ""
+        
+        def clean_val(text):
+            # Strip html tags
+            clean_text = re.sub(r'<[^>]+>', '', text).strip()
+            # Split only on space-surrounded em-dash, en-dash, or hyphen
+            subparts = re.split(r'\s+(?:[\u2014\u2013]|-)\s+', clean_text)
+            return subparts[0].strip(), subparts[1].strip() if len(subparts) > 1 else ""
+            
+        for li in li_items:
+            li_text = re.sub(r'<[^>]+>', '', li).strip()
+            
+            # Match ROIC at start of line
+            if re.match(r'^\s*ROIC', li_text, re.IGNORECASE):
+                val_part = re.sub(r'^\s*ROIC\s*:?\s*', '', li_text, flags=re.IGNORECASE)
+                roic, _ = clean_val(val_part)
+            # Match Debt/Equity at start of line
+            elif re.match(r'^\s*(?:Debt/Equity|Debt to Equity|D/E)', li_text, re.IGNORECASE):
+                val_part = re.sub(r'^\s*(?:Debt/Equity|Debt to Equity|D/E)\s*:?\s*', '', li_text, flags=re.IGNORECASE)
+                de, _ = clean_val(val_part)
+            # Match FCF Yield at start of line
+            elif re.match(r'^\s*FCF Yield', li_text, re.IGNORECASE):
+                val_part = re.sub(r'^\s*FCF Yield\s*:?\s*', '', li_text, flags=re.IGNORECASE)
+                fcf, _ = clean_val(val_part)
+            # Match Valuation or P/E at start of line
+            elif re.match(r'^\s*(?:Valuation|P/E|PE)', li_text, re.IGNORECASE):
+                val_part = re.sub(r'^\s*(?:Valuation|P/E|PE)\s*:?\s*', '', li_text, flags=re.IGNORECASE)
+                val, _ = clean_val(val_part)
+            # Match Action/Status at start of line
+            elif re.match(r'^\s*(?:Action|Status)', li_text, re.IGNORECASE):
+                val_part = re.sub(r'^\s*(?:Action|Status)\s*:?\s*', '', li_text, flags=re.IGNORECASE)
+                status_val, desc_val = clean_val(val_part)
+                if not status:
+                    status = status_val.upper()
+                if desc_val:
+                    comment = desc_val
+            # Match Comment/Note at start of line
+            elif re.match(r'^\s*(?:Comment|Note)', li_text, re.IGNORECASE):
+                val_part = re.sub(r'^\s*(?:Comment|Note)\s*:?\s*', '', li_text, flags=re.IGNORECASE)
+                _, desc_val = clean_val(val_part)
+                if desc_val:
+                    comment = desc_val
+                else:
+                    comment = val_part
+                    
+        # Apply default status mapping colors
         border_color = "#3b82f6"  # Blue default
         bg_status = "#f1f5f9"
         text_status = "#475569"
         
+        status = status.strip()
         if "BUY" in status:
             border_color = "#10b981"  # Green
             bg_status = "#ecfdf5"
@@ -155,7 +219,7 @@ def format_stock_cards(html_content: str) -> str:
           </table>
         </div>
         """
-    return re.sub(stock_pattern, replace_with_card, html_content, flags=re.DOTALL)
+    return re.sub(pattern, replace_with_card, html_content, flags=re.DOTALL)
 
 def build_html_body(subject: str, markdown_content: str) -> str:
     """
@@ -163,8 +227,8 @@ def build_html_body(subject: str, markdown_content: str) -> str:
     """
     tldr_html = extract_tldr(markdown_content)
     
-    # Parse markdown using tables extension
-    raw_html = markdown.markdown(markdown_content, extensions=['tables'])
+    # Parse markdown using tables and fenced_code extensions
+    raw_html = markdown.markdown(markdown_content, extensions=['tables', 'fenced_code'])
     
     # Style standard elements generated by markdown parser
     styled_html = raw_html

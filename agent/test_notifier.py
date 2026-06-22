@@ -84,3 +84,26 @@ Inflation remains persistent at 4.1%. Unemployment rates are still low at 3.5%.
     html_block = extract_tldr(markdown_content)
     assert "Inflation remains persistent at 4.1%." in html_block
     assert "Unemployment rates are still low at 3.5%." in html_block
+
+def test_format_stock_cards_new_layout():
+    html_input = """
+<h3>AAPL — Apple Inc.</h3>
+<p><strong>Valuation Category: B (Hyper-Growth / Tech Platform) → Reverse DCF</strong></p>
+<ul>
+<li><strong>ROIC: 49–69%</strong> — Among the highest of any company in human history.</li>
+<li><strong>Debt/Equity: ~0.85 (market-adjusted)</strong> — Book equity is negative.</li>
+<li><strong>FCF Yield: ~3.0%</strong> — Below our 5% target.</li>
+<li><strong>P/E: 35.8x vs. 5-yr avg ~28x</strong> — Trading at a 27% premium.</li>
+<li><strong>Action: HOLD</strong> — Exceptional quality, but current P/E represents premium.</li>
+</ul>
+    """
+    formatted = format_stock_cards(html_input)
+    assert '<div style="background: #ffffff; border: 1px solid #e2e8f0; border-left: 5px solid #d97706;' in formatted
+    assert "AAPL" in formatted
+    assert "Apple Inc." in formatted
+    assert "HOLD" in formatted
+    assert "49" in formatted  # It could be formatted with en-dash or unicode
+    assert "~0.85" in formatted
+    assert "~3.0%" in formatted
+    assert "35.8x" in formatted
+    assert "Exceptional quality" in formatted

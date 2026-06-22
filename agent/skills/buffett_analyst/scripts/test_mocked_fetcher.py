@@ -297,5 +297,48 @@ class TestYFinanceFetcherMocked(unittest.TestCase):
         # Should not be 'too hard' simply due to recent negative FCF
         self.assertFalse(data.is_too_hard)
 
+    @patch('yfinance.Ticker')
+    def test_fetch_category_2_hijack_avoided(self, mock_ticker_class):
+        """
+        Verify that a stock with high ROIC is not hijacked into Category 2
+        just because of a single negative recent FCF.
+        """
+        mock_ticker = MagicMock()
+        mock_ticker_class.return_value = mock_ticker
+        
+        mock_ticker.info = {
+            "longName": "Mature Compounder Corp",
+            "industry": "Software",
+            "currentPrice": 50.0,
+            "currency": "USD",
+            "trailingPE": 15.0,
+            "fiveYearAvgPE": 15.0,
+            "sharesOutstanding": 1000000,
+            "marketCap": 50000000
+        }
+        
+        # FCF: [-10M, 40M, 50M] -> Median is 40M, recent is -10M.
+        mock_ticker.cashflow = pd.DataFrame(
+            [[-10000000, 40000000, 50000000], [-10000000, 40000000, 50000000]], 
+            index=["FreeCashFlow", "FreeCashFlow"],
+            columns=["2023-12-31", "2022-12-31", "2021-12-31"]
+        )
+        mock_ticker.balance_sheet = pd.DataFrame(
+            [[30000000, 30000000, 30000000], [10000000, 10000000, 10000000], [5000000, 5000000, 5000000]],
+            index=["StockholdersEquity", "TotalDebt", "CashAndCashEquivalents"],
+            columns=["2023-12-31", "2022-12-31", "2021-12-31"]
+        )
+        mock_ticker.income_stmt = pd.DataFrame(
+            [[10000000, 10000000, 10000000], [2100000, 2100000, 2100000], [10000000, 10000000, 10000000]],
+            index=["EBIT", "TaxProvision", "PretaxIncome"],
+            columns=["2023-12-31", "2022-12-31", "2021-12-31"]
+        )
+        
+        data = self.fetcher.fetch_data("NOHIJACK")
+        self.assertIsNotNone(data)
+        # It should value it using Standard DCF (Category 1 or 3), not Mid-Cycle (Category 2)
+        # Because we're passing it to standard DCF logic (from Task 1)
+        self.assertNotEqual(data.valuation_methodology, "Mid-Cycle Normalized")
+
 if __name__ == "__main__":
     unittest.main()

@@ -370,7 +370,7 @@ class YFinanceFetcher:
                     expensive_price = intrinsic_value * 1.20
 
             # 2. CATEGORY: Cyclical / Asset-Heavy
-            elif ticker in ["INTC", "MU"] or (roic < 0.10 and len(fcf_history) >= 2) or (not fcf_history or fcf_history[0] <= 0):
+            elif ticker in ["INTC", "MU"] or (roic < 0.10 and len(fcf_history) >= 2) or not fcf_history:
                 valuation_methodology = "Mid-Cycle Normalized"
                 
                 # Calculate real historical average EPS from income statement

@@ -326,51 +326,23 @@ class YFinanceFetcher:
             implied_growth_rate = 0.0
             expected_growth_rate = 0.0
             
-            # 1. CATEGORY: Hyper-Growth / Tech Platform
-            if ticker in ["NVDA", "MSFT", "NOW", "AAPL", "AMZN", "META", "GOOGL", "NFLX"] or (roic > 0.15 and current_pe > 30):
-                valuation_methodology = "Reverse DCF"
-                if not fcf_history or current_price <= 0 or shares <= 0:
-                    intrinsic_value = current_price
-                    is_too_hard = True
-                    error_msg = "Insufficient FCF or price data for Reverse DCF"
-                    bargain_price = 0.0
-                    fair_price = 0.0
-                    expensive_price = 0.0
-                elif statistics.median(fcf_history[:5]) < 0:
-                    intrinsic_value = 0.0
-                    is_too_hard = True
-                    error_msg = "Negative multi-year median FCF: Too Hard to value reliably using DCF"
-                    bargain_price = 0.0
-                    fair_price = 0.0
-                    expensive_price = 0.0
-                else:
-                    # Solve for growth rate that yields current market price
-                    fcf_base = fcf_history[0]
-                    implied_growth_rate = self.solve_implied_growth(current_price, fcf_base, shares)
+            # Calculate FCF metrics for categorization
+            fcf_cv = 0.0
+            if len(fcf_history) >= 3:
+                fcf_mean = statistics.mean(fcf_history)
+                if fcf_mean != 0:
+                    fcf_cv = statistics.stdev(fcf_history) / abs(fcf_mean)
                     
-                    # Solve for expected growth rate based on historical CAGR cap
-                    expected_growth_rate = 0.15  # Default 15% expected growth for hyper-growth/tech
-                    if len(fcf_history) >= 2:
-                        hist = fcf_history[::-1] # Clean oldest to newest (oldest is index 0)
-                        if hist[0] > 0 and hist[-1] > 0:
-                            n_years = len(hist) - 1
-                            cagr = (hist[-1] / hist[0]) ** (1 / n_years) - 1
-                            if 0 < cagr < 0.30:
-                                expected_growth_rate = cagr
-                            elif cagr >= 0.30:
-                                expected_growth_rate = 0.25 # cap at 25% for conservative hyper-growth
-                                
-                    # Valuation boundaries are established relative to expected rate
-                    discount_rate = 0.10
-                    terminal_growth = 0.02
-                    intrinsic_value = self.calculate_dcf_value(expected_growth_rate, fcf_base, shares, discount_rate, terminal_growth)
-                    
-                    bargain_price = intrinsic_value * 0.70
-                    fair_price = intrinsic_value
-                    expensive_price = intrinsic_value * 1.20
+            fcf_cagr = 0.0
+            if len(fcf_history) >= 2:
+                hist = fcf_history[::-1]
+                if hist[0] > 0 and hist[-1] > 0:
+                    n_years = len(hist) - 1
+                    fcf_cagr = (hist[-1] / hist[0]) ** (1 / n_years) - 1
 
-            # 2. CATEGORY: Cyclical / Asset-Heavy
-            elif ticker in ["INTC", "MU"] or (roic < 0.10 and len(fcf_history) >= 2) or not fcf_history:
+            # 1. CATEGORY: Cyclical / Asset-Heavy
+            # Checked first to prevent cyclicals with a temporary spike in PE from being misclassified as hyper-growth platforms.
+            if roic < 0.10 or fcf_cv > 0.45 or not fcf_history:
                 valuation_methodology = "Mid-Cycle Normalized"
                 
                 # Calculate real historical average EPS from income statement
@@ -415,6 +387,49 @@ class YFinanceFetcher:
                     bargain_price = intrinsic_value * 0.70
                     fair_price = intrinsic_value
                     expensive_price = intrinsic_value * 1.30
+
+            # 2. CATEGORY: Hyper-Growth / Tech Platform
+            elif roic > 0.15 and (current_pe > 30 or fcf_cagr > 0.15):
+                valuation_methodology = "Reverse DCF"
+                if not fcf_history or current_price <= 0 or shares <= 0:
+                    intrinsic_value = current_price
+                    is_too_hard = True
+                    error_msg = "Insufficient FCF or price data for Reverse DCF"
+                    bargain_price = 0.0
+                    fair_price = 0.0
+                    expensive_price = 0.0
+                elif statistics.median(fcf_history[:5]) < 0:
+                    intrinsic_value = 0.0
+                    is_too_hard = True
+                    error_msg = "Negative multi-year median FCF: Too Hard to value reliably using DCF"
+                    bargain_price = 0.0
+                    fair_price = 0.0
+                    expensive_price = 0.0
+                else:
+                    # Solve for growth rate that yields current market price
+                    fcf_base = fcf_history[0]
+                    implied_growth_rate = self.solve_implied_growth(current_price, fcf_base, shares)
+                    
+                    # Solve for expected growth rate based on historical CAGR cap
+                    expected_growth_rate = 0.15  # Default 15% expected growth for hyper-growth/tech
+                    if len(fcf_history) >= 2:
+                        hist = fcf_history[::-1] # Clean oldest to newest (oldest is index 0)
+                        if hist[0] > 0 and hist[-1] > 0:
+                            n_years = len(hist) - 1
+                            cagr = (hist[-1] / hist[0]) ** (1 / n_years) - 1
+                            if 0 < cagr < 0.30:
+                                expected_growth_rate = cagr
+                            elif cagr >= 0.30:
+                                expected_growth_rate = 0.25 # cap at 25% for conservative hyper-growth
+                                
+                    # Valuation boundaries are established relative to expected rate
+                    discount_rate = 0.10
+                    terminal_growth = 0.02
+                    intrinsic_value = self.calculate_dcf_value(expected_growth_rate, fcf_base, shares, discount_rate, terminal_growth)
+                    
+                    bargain_price = intrinsic_value * 0.70
+                    fair_price = intrinsic_value
+                    expensive_price = intrinsic_value * 1.20
 
             # 3. CATEGORY: Mature & Stable (Standard 10-Yr DCF)
             else:

@@ -346,7 +346,7 @@ if __name__ == "__main__":
     if not list_of_files:
         logger.warning("No reports found to send.")
     else:
-        latest_file = max(list_of_files, key=os.path.getctime)
+        latest_file = max(list_of_files, key=os.path.basename)
         with open(latest_file, 'r') as f:
             content = f.read()
         logger.info(f"Sending latest report: {os.path.basename(latest_file)}")

@@ -273,49 +273,44 @@ class YFinanceFetcher:
                 pe_5yr_avg = current_pe or 20.0
                 
             # 5. Centralized valuation models tailored by business category
-            # Fetch FCF History
+            # Fetch FCF, OCF, and CapEx History
             fcf_history = []
+            ocf_history = []
+            capex_history = []
+            
             if cashflow is not None and not cashflow.empty:
-                fcf_key = next((k for k in ['Free Cash Flow', 'FreeCashFlow'] if k in cashflow.index), None)
-                if fcf_key:
-                    val = cashflow.loc[fcf_key]
-                    if isinstance(val, pd.DataFrame):
-                        fcf_history = list(val.iloc[0])
-                    elif hasattr(val, 'tolist'):
-                        fcf_history = val.tolist()
-                    elif hasattr(val, 'iloc'):
-                        fcf_history = list(val)
-                    else:
-                        fcf_history = [val]
-                else:
-                    ocf_key = next((k for k in ['Operating Cash Flow', 'OperatingCashFlow'] if k in cashflow.index), None)
-                    capex_key = next((k for k in ['Capital Expenditure', 'CapitalExpenditure'] if k in cashflow.index), None)
-                    if ocf_key and capex_key:
-                        ocf_val = cashflow.loc[ocf_key]
-                        capex_val = cashflow.loc[capex_key]
-                        
-                        if isinstance(ocf_val, pd.DataFrame):
-                            ocf_list = list(ocf_val.iloc[0])
-                        elif hasattr(ocf_val, 'tolist'):
-                            ocf_list = ocf_val.tolist()
-                        elif hasattr(ocf_val, 'iloc'):
-                            ocf_list = list(ocf_val)
-                        else:
-                            ocf_list = [ocf_val]
-                            
-                        if isinstance(capex_val, pd.DataFrame):
-                            capex_list = list(capex_val.iloc[0])
-                        elif hasattr(capex_val, 'tolist'):
-                            capex_list = capex_val.tolist()
-                        elif hasattr(capex_val, 'iloc'):
-                            capex_list = list(capex_val)
-                        else:
-                            capex_list = [capex_val]
-                            
-                        fcf_history = [float(o) + float(c) for o, c in zip(ocf_list, capex_list)]
+                def get_hist_list(keys):
+                    k = next((x for x in keys if x in cashflow.index), None)
+                    if not k: return []
+                    v = cashflow.loc[k]
+                    if isinstance(v, pd.DataFrame): return list(v.iloc[0])
+                    if hasattr(v, 'tolist'): return v.tolist()
+                    if hasattr(v, 'iloc'): return list(v)
+                    return [v]
+
+                fcf_history = get_hist_list(['Free Cash Flow', 'FreeCashFlow'])
+                ocf_history = get_hist_list(['Operating Cash Flow', 'OperatingCashFlow', 'Cash Flow From Operating Activities'])
+                capex_history = get_hist_list(['Capital Expenditure', 'CapitalExpenditure'])
+
+                if not fcf_history and ocf_history and capex_history:
+                    fcf_history = [float(o) + float(c) for o, c in zip(ocf_history, capex_history)]
                     
             # Clean history
             fcf_history = [float(f) for f in fcf_history if f == f and f is not None]
+            ocf_history = [float(o) for o in ocf_history if o == o and o is not None]
+            capex_history = [abs(float(c)) for c in capex_history if c == c and c is not None]
+            
+            # CapEx Normalization Check
+            if len(capex_history) >= 3 and len(ocf_history) >= 1 and len(fcf_history) >= 1:
+                recent_capex = capex_history[:5]
+                median_capex = statistics.median(recent_capex)
+                current_capex = capex_history[0]
+                
+                if median_capex > 0 and current_capex > 1.5 * median_capex:
+                    logger.info(f"{ticker} flagged for Aggressive Capital Reinvestment Cycle. Normalizing FCF.")
+                    current_ocf = ocf_history[0]
+                    normalized_fcf_base = current_ocf - median_capex
+                    fcf_history[0] = normalized_fcf_base
             shares = info.get('sharesOutstanding') or 0.0
 
             # -------------------------------------------------------------
@@ -326,23 +321,51 @@ class YFinanceFetcher:
             implied_growth_rate = 0.0
             expected_growth_rate = 0.0
             
-            # Calculate FCF metrics for categorization
-            fcf_cv = 0.0
-            if len(fcf_history) >= 3:
-                fcf_mean = statistics.mean(fcf_history)
-                if fcf_mean != 0:
-                    fcf_cv = statistics.stdev(fcf_history) / abs(fcf_mean)
+            # 1. CATEGORY: Hyper-Growth / Tech Platform
+            if ticker in ["NVDA", "MSFT", "NOW", "AAPL", "AMZN", "META", "GOOGL", "NFLX"] or (roic > 0.15 and current_pe > 30):
+                valuation_methodology = "Reverse DCF"
+                if not fcf_history or current_price <= 0 or shares <= 0:
+                    intrinsic_value = current_price
+                    is_too_hard = True
+                    error_msg = "Insufficient FCF or price data for Reverse DCF"
+                    bargain_price = 0.0
+                    fair_price = 0.0
+                    expensive_price = 0.0
+                elif statistics.median(fcf_history[:5]) < 0:
+                    intrinsic_value = 0.0
+                    is_too_hard = True
+                    error_msg = "Negative multi-year median FCF: Too Hard to value reliably using DCF"
+                    bargain_price = 0.0
+                    fair_price = 0.0
+                    expensive_price = 0.0
+                else:
+                    # Solve for growth rate that yields current market price
+                    fcf_base = fcf_history[0]
+                    implied_growth_rate = self.solve_implied_growth(current_price, fcf_base, shares)
                     
-            fcf_cagr = 0.0
-            if len(fcf_history) >= 2:
-                hist = fcf_history[::-1]
-                if hist[0] > 0 and hist[-1] > 0:
-                    n_years = len(hist) - 1
-                    fcf_cagr = (hist[-1] / hist[0]) ** (1 / n_years) - 1
+                    # Solve for expected growth rate based on historical CAGR cap
+                    expected_growth_rate = 0.15  # Default 15% expected growth for hyper-growth/tech
+                    if len(fcf_history) >= 2:
+                        hist = fcf_history[::-1] # Clean oldest to newest (oldest is index 0)
+                        if hist[0] > 0 and hist[-1] > 0:
+                            n_years = len(hist) - 1
+                            cagr = (hist[-1] / hist[0]) ** (1 / n_years) - 1
+                            if 0 < cagr < 0.30:
+                                expected_growth_rate = cagr
+                            elif cagr >= 0.30:
+                                expected_growth_rate = 0.25 # cap at 25% for conservative hyper-growth
+                                
+                    # Valuation boundaries are established relative to expected rate
+                    discount_rate = 0.10
+                    terminal_growth = 0.02
+                    intrinsic_value = self.calculate_dcf_value(expected_growth_rate, fcf_base, shares, discount_rate, terminal_growth)
+                    
+                    bargain_price = intrinsic_value * 0.70
+                    fair_price = intrinsic_value
+                    expensive_price = intrinsic_value * 1.20
 
-            # 1. CATEGORY: Cyclical / Asset-Heavy
-            # Checked first to prevent cyclicals with a temporary spike in PE from being misclassified as hyper-growth platforms.
-            if roic < 0.10 or fcf_cv > 0.45 or not fcf_history:
+            # 2. CATEGORY: Cyclical / Asset-Heavy
+            elif ticker in ["INTC", "MU"] or (roic < 0.10 and len(fcf_history) >= 2) or not fcf_history:
                 valuation_methodology = "Mid-Cycle Normalized"
                 
                 # Calculate real historical average EPS from income statement
@@ -387,49 +410,6 @@ class YFinanceFetcher:
                     bargain_price = intrinsic_value * 0.70
                     fair_price = intrinsic_value
                     expensive_price = intrinsic_value * 1.30
-
-            # 2. CATEGORY: Hyper-Growth / Tech Platform
-            elif roic > 0.15 and (current_pe > 30 or fcf_cagr > 0.15):
-                valuation_methodology = "Reverse DCF"
-                if not fcf_history or current_price <= 0 or shares <= 0:
-                    intrinsic_value = current_price
-                    is_too_hard = True
-                    error_msg = "Insufficient FCF or price data for Reverse DCF"
-                    bargain_price = 0.0
-                    fair_price = 0.0
-                    expensive_price = 0.0
-                elif statistics.median(fcf_history[:5]) < 0:
-                    intrinsic_value = 0.0
-                    is_too_hard = True
-                    error_msg = "Negative multi-year median FCF: Too Hard to value reliably using DCF"
-                    bargain_price = 0.0
-                    fair_price = 0.0
-                    expensive_price = 0.0
-                else:
-                    # Solve for growth rate that yields current market price
-                    fcf_base = fcf_history[0]
-                    implied_growth_rate = self.solve_implied_growth(current_price, fcf_base, shares)
-                    
-                    # Solve for expected growth rate based on historical CAGR cap
-                    expected_growth_rate = 0.15  # Default 15% expected growth for hyper-growth/tech
-                    if len(fcf_history) >= 2:
-                        hist = fcf_history[::-1] # Clean oldest to newest (oldest is index 0)
-                        if hist[0] > 0 and hist[-1] > 0:
-                            n_years = len(hist) - 1
-                            cagr = (hist[-1] / hist[0]) ** (1 / n_years) - 1
-                            if 0 < cagr < 0.30:
-                                expected_growth_rate = cagr
-                            elif cagr >= 0.30:
-                                expected_growth_rate = 0.25 # cap at 25% for conservative hyper-growth
-                                
-                    # Valuation boundaries are established relative to expected rate
-                    discount_rate = 0.10
-                    terminal_growth = 0.02
-                    intrinsic_value = self.calculate_dcf_value(expected_growth_rate, fcf_base, shares, discount_rate, terminal_growth)
-                    
-                    bargain_price = intrinsic_value * 0.70
-                    fair_price = intrinsic_value
-                    expensive_price = intrinsic_value * 1.20
 
             # 3. CATEGORY: Mature & Stable (Standard 10-Yr DCF)
             else:

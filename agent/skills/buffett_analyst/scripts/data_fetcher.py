@@ -217,6 +217,10 @@ class YFinanceFetcher:
 
             roic_history = []
             for _, row in df_align.head(5).iterrows():
+                # STRICT FILTERING: Exclude years with missing structural data
+                if row['ebit'] == 0.0 and row['equity'] == 0.0:
+                    continue
+                    
                 row_tax_rate = 0.21
                 if row['pretax'] > 0 and row['tax'] > 0:
                     row_tax_rate = row['tax'] / row['pretax']
@@ -224,13 +228,12 @@ class YFinanceFetcher:
                         row_tax_rate = 0.21
                 
                 row_nopat = row['ebit'] * (1 - row_tax_rate)
-                row_debt = row['debt'] if row['debt'] != 0.0 else (row['lt_debt'] + row['st_debt'])
-                row_ic = row['equity'] + row_debt - row['cash']
+                row_debt_val = row['debt'] if row['debt'] != 0.0 else (row['lt_debt'] + row['st_debt'])
                 
-                if row_ic <= 0 or row['equity'] <= 0:
-                    fallback_ic = max(row['equity'] + row_debt, 1.0)
-                    roic_history.append(row_nopat / fallback_ic)
-                else:
+                # STRICT IC CALCULATION: Equity + Debt (No cash deduction to avoid inflation)
+                row_ic = row['equity'] + row_debt_val
+                
+                if row_ic > 0:
                     roic_history.append(row_nopat / row_ic)
 
             roic = statistics.median(roic_history) if roic_history else 0.0
@@ -376,27 +379,20 @@ class YFinanceFetcher:
                         if eps_list:
                             eps_5yr_avg = sum(eps_list) / len(eps_list)
                             
-                # Fallback to trailing EPS if average is negative or zero or not found
-                if eps_5yr_avg <= 0:
-                    eps_5yr_avg = info.get('trailingEps') or 1.50
-                    if eps_5yr_avg <= 0:
-                        eps_5yr_avg = 1.50
-                
-                # Target PE: if missing or over 25, fallback to 15.0
+                # Target PE: Revert to company's own average, capped at 25
                 target_pe = pe_5yr_avg
-                if not target_pe or target_pe <= 0 or target_pe > 25.0:
+                if not target_pe or target_pe <= 0:
                     target_pe = 15.0
+                if target_pe > 25.0:
+                    target_pe = 25.0
                 
                 intrinsic_value = eps_5yr_avg * target_pe
-                # If PE is missing, fallback to book value
-                book_value = info.get('bookValue') or 10.0
-                if intrinsic_value <= 0:
-                    intrinsic_value = book_value * 1.5
                 
-                if current_price <= 0:
+                # Flaw fix: Do not invent Intrinsic Value if structurally unprofitable
+                if eps_5yr_avg <= 0:
                     intrinsic_value = 0.0
                     is_too_hard = True
-                    error_msg = "Invalid stock price for normalized multiples"
+                    error_msg = "Structurally negative or missing EPS for cyclical stock"
                     bargain_price = 0.0
                     fair_price = 0.0
                     expensive_price = 0.0
@@ -439,10 +435,10 @@ class YFinanceFetcher:
                             if hist[0] > 0 and hist[-1] > 0:
                                 n_years = len(hist) - 1
                                 cagr = (hist[-1] / hist[0]) ** (1 / n_years) - 1
-                                if 0.0 <= cagr < 0.20:
+                                if 0.0 <= cagr < 0.15:
                                     growth_rate = cagr
-                                elif cagr >= 0.20:
-                                    growth_rate = 0.15  # cap growth at 15% to be conservative
+                                elif cagr >= 0.15:
+                                    growth_rate = 0.15  # STRICT CAP at 15% to prevent fragility
                         
                         expected_growth_rate = growth_rate
                         discount_rate = 0.10  # standard discount rate

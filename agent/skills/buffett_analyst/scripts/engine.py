@@ -195,15 +195,8 @@ def fetch_live_data(tickers: List[str], delay: float = 1.0) -> Optional[pd.DataF
 
         # ROE is not directly in StockData; approximate from yfinance info
         try:
-            import requests, yfinance as yf, urllib3
-            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-            session = requests.Session()
-            session.verify = False
-            session.headers['User-Agent'] = (
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-                'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'
-            )
-            info = yf.Ticker(ticker, session=session).info
+            import yfinance as yf
+            info = yf.Ticker(ticker).info
             roe = info.get('returnOnEquity')
             if roe is None:
                 # If ROE is missing due to negative book equity, use ROA or ROIC as a proxy

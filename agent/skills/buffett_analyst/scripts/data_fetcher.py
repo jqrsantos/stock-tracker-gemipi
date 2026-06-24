@@ -161,13 +161,7 @@ class YFinanceFetcher:
         """
         try:
             logger.info(f"Fetching real market data for ticker: {ticker}...")
-            import requests
-            import urllib3
-            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-            session = requests.Session()
-            session.verify = False
-            session.headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'
-            yf_ticker = yf.Ticker(ticker, session=session)
+            yf_ticker = yf.Ticker(ticker)
             info = yf_ticker.info
             
             if not info or not isinstance(info, dict):

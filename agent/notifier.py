@@ -189,6 +189,7 @@ def format_stock_cards(html_content: str) -> str:
             """
             
         return f"""
+        <!-- STOCK_CARD_START -->
         <div class="stock-card-item" style="background: #ffffff; border: 1px solid #e2e8f0; border-left: 5px solid {border_color}; border-radius: 8px; padding: 18px 22px; flex: 1 1 300px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
             <div>
@@ -218,26 +219,26 @@ def format_stock_cards(html_content: str) -> str:
             {comment_row}
           </table>
         </div>
+        <!-- STOCK_CARD_END -->
         """
     # Replace individual cards
     replaced_html = re.sub(pattern, replace_with_card, html_content, flags=re.DOTALL)
     
     # Now group adjacent stock cards into a flex container
-    # This requires wrapping consecutive .stock-card-item divs
     container_start = '<div style="display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 28px;">'
     container_end = '</div>'
     
-    # Very basic wrap for consecutive cards
+    def wrap_group(match):
+        group_content = match.group(0)
+        group_content = group_content.replace('<!-- STOCK_CARD_START -->', '')
+        group_content = group_content.replace('<!-- STOCK_CARD_END -->', '')
+        return f"{container_start}\n{group_content}{container_end}"
+        
     replaced_html = re.sub(
-        r'(<div class="stock-card-item".*?</div>)\s*(?!<div class="stock-card-item")', 
-        r'\1' + container_end, 
+        r'(?:[ \t\n]*<!-- STOCK_CARD_START -->.*?<!-- STOCK_CARD_END -->[ \t\n]*)+', 
+        wrap_group, 
         replaced_html, 
         flags=re.DOTALL
-    )
-    replaced_html = re.sub(
-        r'(?<!</div>\s*)<div class="stock-card-item"', 
-        container_start + '\n<div class="stock-card-item"', 
-        replaced_html
     )
     
     return replaced_html
@@ -250,6 +251,7 @@ def build_html_body(subject: str, markdown_content: str) -> str:
     
     # Pre-process ASCII grid tables from tabulate into proper Markdown tables 
     # if they are just inside <pre> blocks or standard markdown
+    markdown_content = re.sub(r'<pre><code>\s*(\|.*?\|)\s*</code></pre>', r'\n\1\n', markdown_content, flags=re.DOTALL)
     
     # Parse markdown using tables and fenced_code extensions
     raw_html = markdown.markdown(markdown_content, extensions=['tables', 'fenced_code'])

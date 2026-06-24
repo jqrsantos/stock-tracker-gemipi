@@ -251,7 +251,7 @@ def build_html_body(subject: str, markdown_content: str) -> str:
     
     # Pre-process ASCII grid tables from tabulate into proper Markdown tables 
     # if they are just inside <pre> blocks or standard markdown
-    markdown_content = re.sub(r'<pre><code>\s*(\|.*?\|)\s*</code></pre>', r'\n\1\n', markdown_content, flags=re.DOTALL)
+    markdown_content = re.sub(r'(?:<pre><code>|```[a-zA-Z]*\n)\s*(\|.*?\|)\s*(?:</code></pre>|```)', r'\n\1\n', markdown_content, flags=re.DOTALL)
     
     # Parse markdown using tables and fenced_code extensions
     raw_html = markdown.markdown(markdown_content, extensions=['tables', 'fenced_code'])

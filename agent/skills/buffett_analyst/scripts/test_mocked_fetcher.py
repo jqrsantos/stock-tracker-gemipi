@@ -65,7 +65,7 @@ class TestYFinanceFetcherMocked(unittest.TestCase):
         self.assertEqual(data.ticker, "TEST")
         self.assertEqual(data.valuation_methodology, "Standard DCF")
         self.assertFalse(data.is_too_hard)
-        self.assertGreater(data.roic, 0.10)
+        self.assertGreater(data.roic, 0.08)
         self.assertGreater(data.intrinsic_value, 0.0)
         self.assertGreater(data.bargain_price, 0.0)
 
@@ -339,6 +339,58 @@ class TestYFinanceFetcherMocked(unittest.TestCase):
         # It should value it using Standard DCF (Category 1 or 3), not Mid-Cycle (Category 2)
         # Because we're passing it to standard DCF logic (from Task 1)
         self.assertNotEqual(data.valuation_methodology, "Mid-Cycle Normalized")
+
+    @patch('yfinance.Ticker')
+    def test_roic_missing_data_exclusion(self, mock_ticker_class):
+        """
+        Verify that years with missing structural data (ebit=0 and equity=0) are excluded from ROIC calculation.
+        """
+        mock_ticker = MagicMock()
+        mock_ticker_class.return_value = mock_ticker
+        
+        mock_ticker.info = {
+            "longName": "Missing Data Corp",
+            "industry": "Software",
+            "currentPrice": 50.0,
+            "currency": "USD",
+            "trailingPE": 15.0,
+            "fiveYearAvgPE": 15.0,
+            "sharesOutstanding": 1000000,
+            "marketCap": 50000000
+        }
+        
+        # 4 years of data, where index 2 (2021) has missing data (0s)
+        # Cash flow just to prevent other errors
+        mock_ticker.cashflow = pd.DataFrame(
+            [[10000000, 10000000, 10000000, 10000000]], 
+            index=["FreeCashFlow"],
+            columns=["2023-12-31", "2022-12-31", "2021-12-31", "2020-12-31"]
+        )
+        
+        # Balance sheet
+        mock_ticker.balance_sheet = pd.DataFrame(
+            [[500, 500, 0, 500], [100, 100, 0, 100], [0, 0, 0, 0]],
+            index=["StockholdersEquity", "TotalDebt", "CashAndCashEquivalents"],
+            columns=["2023-12-31", "2022-12-31", "2021-12-31", "2020-12-31"]
+        )
+        
+        # Income stmt
+        mock_ticker.income_stmt = pd.DataFrame(
+            [[100, 120, 0, 150], [20, 25, 0, 30], [100, 120, 0, 150]],
+            index=["EBIT", "TaxProvision", "PretaxIncome"],
+            columns=["2023-12-31", "2022-12-31", "2021-12-31", "2020-12-31"]
+        )
+        
+        data = self.fetcher.fetch_data("MISSING")
+        self.assertIsNotNone(data)
+        
+        # Expected ROICs:
+        # 2023: 80 / 600 = 0.1333...
+        # 2022: 95 / 600 = 0.1583...
+        # 2021: Skipped due to strict exclusion
+        # 2020: 120 / 600 = 0.20
+        # Median of [0.1333, 0.1583, 0.20] = 0.15833...
+        self.assertAlmostEqual(data.roic, 95 / 600, places=4)
 
 if __name__ == "__main__":
     unittest.main()

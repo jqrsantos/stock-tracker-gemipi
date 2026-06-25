@@ -31,6 +31,10 @@ class StockData:
     fcf_yield: float
     current_pe: float
     pe_5yr_avg: float
+    business_type: str = "Asset-Heavy/Cyclical"
+    croic: float = 0.0
+    ev_to_fcf: float = 0.0
+    ev_to_fcf_5yr_median: float = 0.0
     intrinsic_value: float = 0.0
     bargain_price: float = 0.0
     fair_price: float = 0.0
@@ -260,6 +264,37 @@ class YFinanceFetcher:
             market_cap = info.get('marketCap') or 0.0
             fcf_yield = (fcf / market_cap) if market_cap > 0 else 0.0
             
+            # Calculate CROIC
+            cash = self.safe_get_row(balance_sheet, ['CashAndCashEquivalents', 'Cash And Cash Equivalents', 'Cash'])
+            total_debt_equity_cash = debt + equity - cash
+            croic = (fcf / total_debt_equity_cash) if total_debt_equity_cash > 0 else 0.0
+            
+            # Calculate EV/FCF
+            ev = market_cap + debt - cash
+            ev_to_fcf = (ev / fcf) if fcf > 0 else 999.0
+            ev_to_fcf_5yr_median = 20.0 # Placeholder for median
+
+            # Business Model Classifier
+            recent_capex = self.safe_get_row(cashflow, ['CapitalExpenditure', 'Capital Expenditure'])
+            recent_ocf = self.safe_get_row(cashflow, ['OperatingCashFlow', 'Cash Flow From Operating Activities', 'Operating Cash Flow'])
+            net_intangibles = self.safe_get_row(balance_sheet, ['GoodwillAndOtherIntangibleAssets', 'Goodwill', 'IntangibleAssets'])
+            total_assets = self.safe_get_row(balance_sheet, ['TotalAssets', 'Total Assets'])
+
+            capex_ocf_ratio = abs(recent_capex / recent_ocf) if recent_ocf > 0 else 1.0
+            intangibles_assets_ratio = (net_intangibles / total_assets) if total_assets > 0 else 0.0
+
+            if capex_ocf_ratio < 0.20 or intangibles_assets_ratio > 0.40:
+                business_type = "Asset-Light/Platform"
+            else:
+                business_type = "Asset-Heavy/Cyclical"
+
+            # Dynamic WACC (Discount Rate)
+            beta = info.get('beta') or 1.0
+            risk_free_rate = 0.04
+            equity_risk_premium = 0.05
+            cost_of_equity = risk_free_rate + (beta * equity_risk_premium)
+            discount_rate = min(max(cost_of_equity, 0.07), 0.15) # Bound between 7% and 15%
+            
             # Fallback for current P/E if not in info
             if current_pe == 0.0 and current_price > 0:
                 eps = info.get('trailingEps') or 0.0
@@ -338,7 +373,7 @@ class YFinanceFetcher:
                 else:
                     # Solve for growth rate that yields current market price
                     fcf_base = fcf_history[0]
-                    implied_growth_rate = self.solve_implied_growth(current_price, fcf_base, shares)
+                    implied_growth_rate = self.solve_implied_growth(current_price, fcf_base, shares, discount_rate, 0.025)
                     
                     # Solve for expected growth rate based on historical CAGR cap
                     expected_growth_rate = 0.15  # Default 15% expected growth for hyper-growth/tech
@@ -353,8 +388,7 @@ class YFinanceFetcher:
                                 expected_growth_rate = 0.25 # cap at 25% for conservative hyper-growth
                                 
                     # Valuation boundaries are established relative to expected rate
-                    discount_rate = 0.10
-                    terminal_growth = 0.02
+                    terminal_growth = 0.025
                     intrinsic_value = self.calculate_dcf_value(expected_growth_rate, fcf_base, shares, discount_rate, terminal_growth)
                     
                     bargain_price = intrinsic_value * 0.70
@@ -441,40 +475,25 @@ class YFinanceFetcher:
                                     growth_rate = 0.15  # STRICT CAP at 15% to prevent fragility
                         
                         expected_growth_rate = growth_rate
-                        discount_rate = 0.10  # standard discount rate
-                        terminal_growth = 0.02  # standard terminal growth rate
+                        terminal_growth = 0.025  # capped terminal growth rate
                         
                         intrinsic_value = self.calculate_dcf_value(growth_rate, fcf_history[0], shares, discount_rate, terminal_growth)
                         bargain_price = intrinsic_value * 0.70
                         fair_price = intrinsic_value
                         expensive_price = intrinsic_value * 1.20
             
-            # If FCF growth is negative, classify it as 'Too Hard' to value.
+            # FCF growth check (agent will handle 10-Q audit if negative)
+            fcf_growth_negative = False
             if len(fcf_history) >= 2:
                 recent_fcf = fcf_history[0]
                 prior_fcf = fcf_history[1]
-                
-                yoy_growth = 0.0
-                if prior_fcf > 0:
-                    yoy_growth = (recent_fcf - prior_fcf) / prior_fcf
+                if prior_fcf > 0 and recent_fcf < prior_fcf:
+                    fcf_growth_negative = True
                 elif recent_fcf < prior_fcf:
-                    yoy_growth = -1.0
-                
-                hist = fcf_history[::-1]
-                cagr = 0.0
-                if hist[0] > 0 and hist[-1] > 0:
-                    n_years = len(hist) - 1
-                    cagr = (hist[-1] / hist[0]) ** (1 / n_years) - 1
-                elif hist[-1] < hist[0]:
-                    cagr = -1.0
-                
-                if yoy_growth < 0 or cagr < 0:
-                    is_too_hard = True
-                    error_msg = f"Negative FCF growth (YoY: {yoy_growth:.1%}, CAGR: {cagr:.1%}): Too Hard to value"
-                    intrinsic_value = 0.0
-                    bargain_price = 0.0
-                    fair_price = 0.0
-                    expensive_price = 0.0
+                    fcf_growth_negative = True
+            
+            if fcf_growth_negative:
+                error_msg += " [REQUIRES 10-Q FCF AUDIT]"
             
             return StockData(
                 ticker=ticker,
@@ -485,6 +504,10 @@ class YFinanceFetcher:
                 fcf_yield=fcf_yield,
                 current_pe=current_pe,
                 pe_5yr_avg=pe_5yr_avg,
+                business_type=business_type,
+                croic=croic,
+                ev_to_fcf=ev_to_fcf,
+                ev_to_fcf_5yr_median=ev_to_fcf_5yr_median,
                 intrinsic_value=intrinsic_value,
                 bargain_price=bargain_price,
                 fair_price=fair_price,

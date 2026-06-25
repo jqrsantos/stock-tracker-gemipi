@@ -100,7 +100,7 @@ class YFinanceFetcher:
                     return pd.Series([float(val)], index=[0])
         return pd.Series(dtype=float)
 
-    def calculate_dcf_value(self, growth_rate: float, fcf_base: float, shares: float, discount_rate: float = 0.10, terminal_growth: float = 0.02) -> float:
+    def calculate_dcf_value(self, growth_rate: float, fcf_base: float, shares: float, discount_rate: float = 0.10, terminal_growth: float = 0.035) -> float:
         """
         Calculates the per-share intrinsic value given a growth rate.
         """
@@ -130,7 +130,7 @@ class YFinanceFetcher:
         
         return (discounted_value + discounted_terminal_value) / shares
 
-    def solve_implied_growth(self, current_price: float, fcf_base: float, shares: float, discount_rate: float = 0.10, terminal_growth: float = 0.02) -> float:
+    def solve_implied_growth(self, current_price: float, fcf_base: float, shares: float, discount_rate: float = 0.10, terminal_growth: float = 0.035) -> float:
         """
         Finds the implied FCF growth rate for the current price using binary search with dynamic bounds.
         """
@@ -377,7 +377,7 @@ class YFinanceFetcher:
                 else:
                     # Solve for growth rate that yields current market price
                     fcf_base = fcf_history[0]
-                    implied_growth_rate = self.solve_implied_growth(current_price, fcf_base, shares, discount_rate, 0.025)
+                    implied_growth_rate = self.solve_implied_growth(current_price, fcf_base, shares, discount_rate, 0.035)
                     
                     # Solve for expected growth rate based on historical CAGR cap
                     expected_growth_rate = 0.15  # Default 15% expected growth for hyper-growth/tech
@@ -392,15 +392,57 @@ class YFinanceFetcher:
                                 expected_growth_rate = 0.25 # cap at 25% for conservative hyper-growth
                                 
                     # Valuation boundaries are established relative to expected rate
-                    terminal_growth = 0.025
+                    terminal_growth = 0.035
                     intrinsic_value = self.calculate_dcf_value(expected_growth_rate, fcf_base, shares, discount_rate, terminal_growth)
                     
                     bargain_price = intrinsic_value * 0.70
                     fair_price = intrinsic_value
                     expensive_price = intrinsic_value * 1.20
 
+            # 1.5. CATEGORY: Supercycle Semiconductors Breakout
+            elif ticker in ["NVDA", "MU", "INTC", "AMD"] and len(fcf_history) >= 3 and current_price > 0 and shares > 0:
+                # Check if current FCF is significantly outperforming the 5-year median, indicating a supercycle
+                hist_median = statistics.median(fcf_history[:5])
+                if (hist_median > 0 and fcf_history[0] > 1.5 * hist_median) or (hist_median <= 0 and fcf_history[0] > 0):
+                    valuation_methodology = "Supercycle DCF"
+                    growth_rate = 0.20 # Assume 20% growth for supercycle peak
+                    expected_growth_rate = growth_rate
+                    terminal_growth = 0.035
+                    intrinsic_value = self.calculate_dcf_value(growth_rate, fcf_history[0], shares, discount_rate, terminal_growth)
+                    bargain_price = intrinsic_value * 0.70
+                    fair_price = intrinsic_value
+                    expensive_price = intrinsic_value * 1.30
+                else:
+                    # Fallback to Cyclical if not breaking out
+                    valuation_methodology = "Mid-Cycle Normalized"
+                    eps_5yr_avg = 0.0
+                    if income_stmt is not None and not income_stmt.empty:
+                        eps_key = next((k for k in ['Diluted EPS', 'DilutedEPS', 'Basic EPS', 'BasicEPS'] if k in income_stmt.index), None)
+                        if eps_key is not None:
+                            eps_vals = income_stmt.loc[eps_key]
+                            if hasattr(eps_vals, 'iloc'):
+                                eps_list = [float(x) for x in eps_vals if x == x and x is not None]
+                            else:
+                                eps_list = [float(eps_vals)]
+                            eps_list = [x for x in eps_list if not math.isnan(x) and not math.isinf(x)]
+                            if eps_list:
+                                eps_5yr_avg = sum(eps_list) / len(eps_list)
+                    target_pe = min(pe_5yr_avg if pe_5yr_avg > 0 else 15.0, 25.0)
+                    intrinsic_value = eps_5yr_avg * target_pe
+                    if eps_5yr_avg <= 0:
+                        intrinsic_value = 0.0
+                        is_too_hard = True
+                        error_msg = "Structurally negative or missing EPS for cyclical stock"
+                        bargain_price = 0.0
+                        fair_price = 0.0
+                        expensive_price = 0.0
+                    else:
+                        bargain_price = intrinsic_value * 0.70
+                        fair_price = intrinsic_value
+                        expensive_price = intrinsic_value * 1.30
+
             # 2. CATEGORY: Cyclical / Asset-Heavy
-            elif ticker in ["INTC", "MU"] or (roic < 0.10 and len(fcf_history) >= 2) or not fcf_history:
+            elif (roic < 0.10 and len(fcf_history) >= 2) or not fcf_history:
                 valuation_methodology = "Mid-Cycle Normalized"
                 
                 # Calculate real historical average EPS from income statement
@@ -478,7 +520,7 @@ class YFinanceFetcher:
                                     growth_rate = 0.15  # STRICT CAP at 15% to prevent fragility
                         
                         expected_growth_rate = growth_rate
-                        terminal_growth = 0.025  # capped terminal growth rate
+                        terminal_growth = 0.035  # capped terminal growth rate
                         
                         intrinsic_value = self.calculate_dcf_value(growth_rate, fcf_history[0], shares, discount_rate, terminal_growth)
                         bargain_price = intrinsic_value * 0.70

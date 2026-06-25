@@ -50,10 +50,23 @@ When executed, the primary agent MUST orchestrate parallel subagents:
 3. **Execute Decision Engine:** Run the absolute valuation engine with **live yfinance data** using: `uv run python agent/skills/buffett_analyst/scripts/engine.py --live --holdings <owned_tickers> --watchlist <bargain_tickers>`. To construct `--holdings`, retrieve portfolio JSON keys from `GET /portfolio/holdings` and join with commas. Pass the top 3 bargain tickers from the `bargain_hunter` to `--watchlist`. The `--live` flag fetches real fundamentals (ROIC, ROE, P/E, D/E, OperatingMargin, Price) directly from Yahoo Finance — never use mockup data in production runs. When a stock triggers [REQUIRES 10-Q FCF AUDIT], mandate the 10-Q Audit Agent to review the filing.
 4. **Generate Report:** Compile outputs into `knowledge_base/daily_reports/YYYY-MM-DD-report.md`. Include sections:
    - `[MACRO DASHBOARD]`: Integrated US, EU, Japan economic/interest policies & geopolitical narratives.
-   - `[ABSOLUTE VALUATION TABLE]`: Embed the engine ASCII table output inside a code block.
+   - `[ABSOLUTE VALUATION TABLE]`: You are strictly forbidden from placing valuation metrics and actionable advice into bulleted lists within the `[PORTFOLIO HEALTH]` section. You MUST render the `[ABSOLUTE VALUATION TABLE]` exactly as formatted below, transcribing the output from `engine.py`.
+     ```markdown
+     ### [ABSOLUTE VALUATION TABLE]
+     | Ticker | Current Price | Fair Value (Intrinsic) | MoS % | Status | Action |
+     |--------|---------------|-------------------------|-------|--------|--------|
+     | [Tk]   | $[Price]      | $[Value]                | [%]   | [Stat] | [Act]  |
+     ```
+     Allowable Actions: "STRONG BUY", "BUY", "HOLD", "SELL", "STRONG SELL". Actions must be dictated purely by absolute valuation and moat integrity, NEVER by recent stock momentum. The phrase "lock in profits" is explicitly banned under all circumstances.
    - `[PORTFOLIO HEALTH]`: Metrics and stock properties ready for cards.
    - `[BARGAIN RADAR]`: 3 bargains and their parameters.
    - `[GLOBAL COMPANY NEWS]`: Dynamic news summaries grouped at the bottom.
+   - `[10-Q FCF AUDITS]`: IF a stock flags `[REQUIRES 10-Q FCF AUDIT]`, you MUST invoke the `10q_auditor` subagent to analyze the most recent Statement of Cash Flows. You MUST output the findings explicitly using this format:
+     >> 10-Q FCF AUDIT FOR [TICKER]: 
+     >> OCF Trend: [Growing/Flat/Declining]
+     >> CapEx Trend: [Increasing/Decreasing]
+     >> Verdict: [Temporary Reinvestment Cycle OR Structural Core Decline]
+     If Verdict is "Temporary Reinvestment Cycle", you may BUY/HOLD based on valuation. If "Structural Core Decline", you MUST SELL/STRONG SELL.
 5. **Update Memory:** Save macro highlights to `knowledge_base/active_memory.md`.
 6. **Subagent & API Error Fallback:** Handle API call failures or subagent errors gracefully. If any subagent or endpoint fails, log a warning block in the final report and proceed using default or empty values, rather than crashing the workflow.
 

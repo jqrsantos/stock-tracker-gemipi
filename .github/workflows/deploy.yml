@@ -16,3 +16,9 @@ jobs:
           git clean -fd
           git pull origin main
           docker compose up -d --build
+          
+      - name: Trigger AI Research Agent
+        run: |
+          cd /home/joaosantos/stock-tracker
+          sleep 10
+          ./run_daily_research.sh

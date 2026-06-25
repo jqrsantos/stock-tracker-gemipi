@@ -365,8 +365,7 @@ class YFinanceFetcher:
                     expensive_price = 0.0
                 elif statistics.median(fcf_history[:5]) < 0:
                     intrinsic_value = 0.0
-                    is_too_hard = True
-                    error_msg = "Negative multi-year median FCF: Too Hard to value reliably using DCF"
+                    error_msg = "Negative multi-year median FCF [REQUIRES 10-Q FCF AUDIT]"
                     bargain_price = 0.0
                     fair_price = 0.0
                     expensive_price = 0.0
@@ -447,8 +446,7 @@ class YFinanceFetcher:
                     expensive_price = 0.0
                 elif statistics.median(fcf_history[:5]) < 0:
                     intrinsic_value = 0.0
-                    is_too_hard = True
-                    error_msg = "Negative multi-year median FCF: Too Hard to value reliably"
+                    error_msg = "Negative multi-year median FCF [REQUIRES 10-Q FCF AUDIT]"
                     bargain_price = 0.0
                     fair_price = 0.0
                     expensive_price = 0.0

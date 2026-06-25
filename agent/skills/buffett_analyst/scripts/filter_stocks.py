@@ -93,12 +93,19 @@ def main():
     fetcher = YFinanceFetcher()
     
     stocks = []
-    for ticker in curated_tickers:
-        data = fetcher.fetch_data(ticker)
-        if data and not data.is_too_hard:
-            stocks.append(data)
-        elif data and data.is_too_hard:
-            logger.info(f"Skipping {ticker} - Classified as 'Too Hard': {data.error_message}")
+    import concurrent.futures
+    with concurrent.futures.ThreadPoolExecutor(max_workers=min(10, len(curated_tickers) or 1)) as executor:
+        future_to_ticker = {executor.submit(fetcher.fetch_data, ticker): ticker for ticker in curated_tickers}
+        for future in concurrent.futures.as_completed(future_to_ticker):
+            ticker = future_to_ticker[future]
+            try:
+                data = future.result()
+                if data and not data.is_too_hard:
+                    stocks.append(data)
+                elif data and data.is_too_hard:
+                    logger.info(f"Skipping {ticker} - Classified as 'Too Hard': {data.error_message}")
+            except Exception as exc:
+                logger.error(f"{ticker} generated an exception: {exc}")
 
     buffett_filter = BuffettQuantitativeFilter()
     results = buffett_filter.filter(stocks)

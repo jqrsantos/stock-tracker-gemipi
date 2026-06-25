@@ -449,6 +449,33 @@ class YFinanceFetcher:
                         fair_price = intrinsic_value
                         expensive_price = intrinsic_value * 1.20
             
+            # If FCF growth is negative, classify it as 'Too Hard' to value.
+            if len(fcf_history) >= 2:
+                recent_fcf = fcf_history[0]
+                prior_fcf = fcf_history[1]
+                
+                yoy_growth = 0.0
+                if prior_fcf > 0:
+                    yoy_growth = (recent_fcf - prior_fcf) / prior_fcf
+                elif recent_fcf < prior_fcf:
+                    yoy_growth = -1.0
+                
+                hist = fcf_history[::-1]
+                cagr = 0.0
+                if hist[0] > 0 and hist[-1] > 0:
+                    n_years = len(hist) - 1
+                    cagr = (hist[-1] / hist[0]) ** (1 / n_years) - 1
+                elif hist[-1] < hist[0]:
+                    cagr = -1.0
+                
+                if yoy_growth < 0 or cagr < 0:
+                    is_too_hard = True
+                    error_msg = f"Negative FCF growth (YoY: {yoy_growth:.1%}, CAGR: {cagr:.1%}): Too Hard to value"
+                    intrinsic_value = 0.0
+                    bargain_price = 0.0
+                    fair_price = 0.0
+                    expensive_price = 0.0
+            
             return StockData(
                 ticker=ticker,
                 name=name,

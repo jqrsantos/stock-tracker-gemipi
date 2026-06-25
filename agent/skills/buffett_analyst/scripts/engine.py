@@ -181,18 +181,12 @@ def fetch_live_data(tickers: List[str], delay: float = 1.0) -> Optional[pd.DataF
     rows = []
     failed = []
 
-    for ticker in tickers:
+    def fetch_single(ticker):
         print(f"  Fetching live data: {ticker}...", flush=True)
         stock = fetcher.fetch_data(ticker)
         if stock is None:
-            print(f"  [SKIP] {ticker}: fetch returned None")
-            failed.append(ticker)
-            time.sleep(delay)
-            continue
-        # is_too_hard only blocks DCF valuation — fundamental metrics are still usable for TOPSIS
-        if stock.is_too_hard:
-            print(f"  [NOTE] {ticker}: DCF valuation unreliable ({stock.error_message}), but fundamentals included in TOPSIS matrix.")
-
+            return None, ticker
+        
         # ROE is not directly in StockData; approximate from yfinance info
         try:
             import yfinance as yf
@@ -214,7 +208,7 @@ def fetch_live_data(tickers: List[str], delay: float = 1.0) -> Optional[pd.DataF
         de_clamped = round(min(stock.debt_to_equity, 10.0), 4)  # cap extreme leverage
         op_margin_clamped = round(min(max(op_margin, -0.5), 0.5), 4)
 
-        rows.append({
+        return {
             'Ticker': ticker.upper(),
             'ROIC': roic_clamped,
             'ROE': roe_clamped,
@@ -223,8 +217,22 @@ def fetch_live_data(tickers: List[str], delay: float = 1.0) -> Optional[pd.DataF
             'OperatingMargin': op_margin_clamped,
             'Price': round(stock.current_price, 2),
             'Currency': stock.currency,
-        })
-        time.sleep(delay)  # Respect rate limits
+        }, None
+
+    import concurrent.futures
+    with concurrent.futures.ThreadPoolExecutor(max_workers=min(10, len(tickers) or 1)) as executor:
+        futures = {executor.submit(fetch_single, ticker): ticker for ticker in tickers}
+        for future in concurrent.futures.as_completed(futures):
+            try:
+                row, err_ticker = future.result()
+                if row:
+                    rows.append(row)
+                elif err_ticker:
+                    failed.append(err_ticker)
+            except Exception as e:
+                ticker = futures[future]
+                print(f"Error fetching {ticker}: {e}")
+                failed.append(ticker)
 
     if failed:
         print(f"\n[WARNING] Skipped {len(failed)} ticker(s) due to fetch errors: {', '.join(failed)}")

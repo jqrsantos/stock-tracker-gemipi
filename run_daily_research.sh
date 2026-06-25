@@ -36,7 +36,8 @@ if ! "$AGY_BIN" --prompt "You are a senior financial research agent. Use your 'B
 4. Apply the dynamic valuation strategy (Stable DCF, Reverse DCF, or Normalized Mid-Cycle averages) depending on the stock's business category (predictable, hyper-growth, or cyclical). If FCF growth is negative, classify it as 'Too Hard' to value.
 5. STRICT MANDATE: Exclude all non-peaceful stocks (defense/munitions/tactical surveillance).
 6. Persist identified bargains with their calculated dynamic price intervals (Bargain, Fair, Expensive) using 'POST /bargains/'.
-7. Update the knowledge base and active memory, and write the final report. Print 'REPORT_COMPLETE' when finished." --dangerously-skip-permissions; then
+7. Update the knowledge base and active memory, and write the final report. Print 'REPORT_COMPLETE' when finished.
+8. CRITICAL SYNCHRONICITY INSTRUCTION: When calling run_command, always set WaitMsBeforeAsync to 10000. Do NOT let commands go to the background or pause/end your turn until the entire report has been written and 'REPORT_COMPLETE' has been printed." --dangerously-skip-permissions; then
   echo "Error: Financial research run failed." >&2
   exit 1
 fi

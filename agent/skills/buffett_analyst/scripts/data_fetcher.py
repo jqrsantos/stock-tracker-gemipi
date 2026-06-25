@@ -134,7 +134,7 @@ class YFinanceFetcher:
         """
         Finds the implied FCF growth rate for the current price using binary search with dynamic bounds.
         """
-        if shares <= 0 or current_price <= 0:
+        if shares <= 0 or current_price <= 0 or fcf_base <= 0:
             return 0.0
             
         low = -0.20
@@ -272,7 +272,7 @@ class YFinanceFetcher:
             # Calculate EV/FCF
             ev = market_cap + debt - cash
             ev_to_fcf = (ev / fcf) if fcf > 0 else 999.0
-            ev_to_fcf_5yr_median = 20.0 # Placeholder for median
+            ev_to_fcf_5yr_median = 20.0 # Will be updated after fetching fcf_history
 
             # Business Model Classifier
             recent_capex = self.safe_get_row(cashflow, ['CapitalExpenditure', 'Capital Expenditure'])
@@ -332,6 +332,11 @@ class YFinanceFetcher:
             ocf_history = [float(o) for o in ocf_history if o == o and o is not None]
             capex_history = [abs(float(c)) for c in capex_history if c == c and c is not None]
             
+            # Calculate 5-year median EV/FCF using current EV
+            if ev > 0 and len(fcf_history) >= 3:
+                hist_ev_to_fcf = [(ev / f) if f > 0 else 999.0 for f in fcf_history[:5]]
+                ev_to_fcf_5yr_median = statistics.median(hist_ev_to_fcf)
+                
             # CapEx Normalization Check
             if len(capex_history) >= 3 and len(ocf_history) >= 1 and len(fcf_history) >= 1:
                 recent_capex = capex_history[:5]
@@ -357,7 +362,7 @@ class YFinanceFetcher:
             if ticker in ["NVDA", "MSFT", "NOW", "AAPL", "AMZN", "META", "GOOGL", "NFLX"] or (roic > 0.15 and current_pe > 30):
                 valuation_methodology = "Reverse DCF"
                 if not fcf_history or current_price <= 0 or shares <= 0:
-                    intrinsic_value = current_price
+                    intrinsic_value = 0.0
                     is_too_hard = True
                     error_msg = "Insufficient FCF or price data for Reverse DCF"
                     bargain_price = 0.0
@@ -485,9 +490,7 @@ class YFinanceFetcher:
             if len(fcf_history) >= 2:
                 recent_fcf = fcf_history[0]
                 prior_fcf = fcf_history[1]
-                if prior_fcf > 0 and recent_fcf < prior_fcf:
-                    fcf_growth_negative = True
-                elif recent_fcf < prior_fcf:
+                if recent_fcf < prior_fcf:
                     fcf_growth_negative = True
             
             if fcf_growth_negative:

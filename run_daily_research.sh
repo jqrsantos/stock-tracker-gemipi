@@ -32,8 +32,8 @@ AGY_BIN=$(command -v agy || echo "$USER_HOME/.local/bin/agy")
 if ! "$AGY_BIN" --prompt "You are a senior financial research agent. Use your 'Buffett Strategic Analyst' skill to perform a Deep Scour of the current portfolio: ($PORTFOLIO_TICKERS) and find bargains.
 1. Perform web searches to identify 5-10 undervalued high-quality compounders, stocks hitting 52-week lows, or sector-specific opportunities (excluding defense/espionage).
 2. Combine these dynamically searched tickers with the portfolio tickers.
-3. Run filter_stocks.py passing all these tickers as command line arguments (e.g. 'python3 filter_stocks.py AAPL MSFT HPQ ...'). If no arguments are passed, it runs on the baseline.
-4. Apply the dynamic valuation strategy (Stable DCF, Reverse DCF, or Normalized Mid-Cycle averages) depending on the stock's business category (predictable, hyper-growth, or cyclical). If FCF growth is negative, classify it as 'Too Hard' to value.
+3. Run engine.py for absolute valuation passing all these tickers as command line arguments (e.g. 'uv run python agent/skills/buffett_analyst/scripts/engine.py --live --watchlist AAPL MSFT HPQ ...').
+4. Apply the dynamic valuation strategy (Stable DCF, Reverse DCF, or Normalized Mid-Cycle averages) depending on the stock's business category (predictable, hyper-growth, or cyclical). Mandate the 10-Q audit agent for negative FCF.
 5. STRICT MANDATE: Exclude all non-peaceful stocks (defense/munitions/tactical surveillance).
 6. Persist identified bargains with their calculated dynamic price intervals (Bargain, Fair, Expensive) using 'POST /bargains/'.
 7. Update the knowledge base and active memory, and write the final report. Print 'REPORT_COMPLETE' when finished.

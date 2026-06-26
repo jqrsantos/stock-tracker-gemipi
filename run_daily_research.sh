@@ -29,7 +29,7 @@ fi
 # 2. Execute Antigravity CLI (agy) to perform the financial research
 AGY_BIN=$(command -v agy || echo "$USER_HOME/.local/bin/agy")
 
-if ! "$AGY_BIN" --prompt "You are a senior financial research agent. Use your 'Buffett Strategic Analyst' skill to perform a Deep Scour of the current portfolio: ($PORTFOLIO_TICKERS) and find bargains.
+if ! "$AGY_BIN" --print-timeout 15m --prompt "You are a senior financial research agent. Use your 'Buffett Strategic Analyst' skill to perform a Deep Scour of the current portfolio: ($PORTFOLIO_TICKERS) and find bargains.
 1. Perform web searches to identify 5-10 undervalued high-quality compounders, stocks hitting 52-week lows, or sector-specific opportunities (excluding defense/espionage).
 2. Combine these dynamically searched tickers with the portfolio tickers.
 3. Run engine.py for absolute valuation in parallel passing all these tickers as a comma-separated string with the --csv flag (e.g. 'uv run python agent/skills/buffett_analyst/scripts/engine.py --live --watchlist AAPL,MSFT,HPQ --csv'). This fetches data in parallel and outputs all metrics (Bargain, Fair, Expensive, Category, Methodology, ErrorMsg) synchronously in under 10 seconds. Do NOT write your own sequential python scratch scripts to fetch stock data.

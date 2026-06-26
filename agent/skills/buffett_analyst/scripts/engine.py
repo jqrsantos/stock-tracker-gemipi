@@ -128,6 +128,7 @@ def fetch_live_data(tickers: List[str], delay: float = 1.0) -> Optional[pd.DataF
             'EV_to_FCF': round(stock.ev_to_fcf, 2) if getattr(stock, 'ev_to_fcf', None) else 0.0,
             'Error_Msg': getattr(stock, 'error_message', ''),
             'Currency': getattr(stock, 'currency', 'USD'),
+            'Valuation_Methodology': getattr(stock, 'valuation_methodology', 'Unknown'),
         }, None
 
     import concurrent.futures
@@ -160,6 +161,7 @@ def main():
     parser.add_argument("--holdings", type=str, default="", help="Comma-separated list of currently owned tickers")
     parser.add_argument("--watchlist", type=str, default="", help="Comma-separated list of watchlist/bargain candidate tickers")
     parser.add_argument("--live", action="store_true", help="Fetch live fundamental data from Yahoo Finance via yfinance")
+    parser.add_argument("--csv", action="store_true", help="Output results in CSV format containing all columns")
     args = parser.parse_args()
 
     holdings_list = [t.strip().upper() for t in args.holdings.split(",") if t.strip()]
@@ -170,7 +172,7 @@ def main():
         if not all_tickers:
             print("Error: --live requires at least one ticker via --holdings or --watchlist.")
             sys.exit(1)
-        print(f"Fetching live yfinance data for: {', '.join(all_tickers)}\n")
+        print(f"Fetching live yfinance data for: {', '.join(all_tickers)}\n", file=sys.stderr)
         df = fetch_live_data(all_tickers)
         if df is None or df.empty:
             print("Error: Live data fetch returned no usable results. Check network/SSL.")
@@ -178,7 +180,7 @@ def main():
         # Update holdings_list to only include tickers that successfully fetched
         fetched_tickers = set(df['Ticker'].str.upper())
         holdings_list = [t for t in holdings_list if t in fetched_tickers]
-        print(f"\nLive data loaded for {len(df)} ticker(s).\n")
+        print(f"\nLive data loaded for {len(df)} ticker(s).\n", file=sys.stderr)
     elif args.data_path:
         if not os.path.exists(args.data_path):
             print(f"Error: Data path '{args.data_path}' does not exist.")
@@ -196,6 +198,15 @@ def main():
     df = generate_action_matrix(df, holdings_list)
 
     # 2. Output
+    if args.csv:
+        print("Ticker,Price,Bargain,Fair,Expensive,Category,Methodology,ErrorMsg,Currency")
+        for _, row in df.iterrows():
+            error_msg = row.get('Error_Msg', '')
+            if pd.isna(error_msg):
+                error_msg = ''
+            print(f"{row['Ticker']},{row['Price']:.2f},{row['Bargain_Price']:.2f},{row['Fair_Price']:.2f},{row['Expensive_Price']:.2f},{row['Business_Type']},{row['Valuation_Methodology']},{error_msg},{row['Currency']}")
+        sys.exit(0)
+
     print(generate_ascii_table(df, holdings_list))
 
 

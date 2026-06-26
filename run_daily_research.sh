@@ -32,12 +32,12 @@ AGY_BIN=$(command -v agy || echo "$USER_HOME/.local/bin/agy")
 if ! "$AGY_BIN" --prompt "You are a senior financial research agent. Use your 'Buffett Strategic Analyst' skill to perform a Deep Scour of the current portfolio: ($PORTFOLIO_TICKERS) and find bargains.
 1. Perform web searches to identify 5-10 undervalued high-quality compounders, stocks hitting 52-week lows, or sector-specific opportunities (excluding defense/espionage).
 2. Combine these dynamically searched tickers with the portfolio tickers.
-3. Run engine.py for absolute valuation passing all these tickers as a comma-separated string (e.g. 'uv run python agent/skills/buffett_analyst/scripts/engine.py --live --watchlist AAPL,MSFT,HPQ').
+3. Run engine.py for absolute valuation in parallel passing all these tickers as a comma-separated string with the --csv flag (e.g. 'uv run python agent/skills/buffett_analyst/scripts/engine.py --live --watchlist AAPL,MSFT,HPQ --csv'). This fetches data in parallel and outputs all metrics (Bargain, Fair, Expensive, Category, Methodology, ErrorMsg) synchronously in under 10 seconds. Do NOT write your own sequential python scratch scripts to fetch stock data.
 4. Apply the dynamic valuation strategy (Stable DCF, Reverse DCF, or Normalized Mid-Cycle averages) depending on the stock's business category (predictable, hyper-growth, or cyclical). Mandate the 10-Q audit agent for negative FCF.
 5. STRICT MANDATE: Exclude all non-peaceful stocks (defense/munitions/tactical surveillance).
 6. Persist identified bargains with their calculated dynamic price intervals (Bargain, Fair, Expensive) using 'POST /bargains/'.
 7. Update the knowledge base and active memory, and write the final report. Print 'REPORT_COMPLETE' when finished.
-8. CRITICAL SYNCHRONICITY INSTRUCTION: When calling run_command, always set WaitMsBeforeAsync to 10000. Do NOT let commands go to the background or pause/end your turn until the entire report has been written and 'REPORT_COMPLETE' has been printed." --dangerously-skip-permissions; then
+8. CRITICAL SYNCHRONICITY INSTRUCTION: When calling run_command, always set WaitMsBeforeAsync to 10000. Since engine.py with --csv runs in parallel, it will complete synchronously in ~6 seconds. Ensure it does not go to the background. Do NOT let commands go to the background or pause/end your turn until the entire report has been written and 'REPORT_COMPLETE' has been printed." --dangerously-skip-permissions; then
   echo "Error: Financial research run failed." >&2
   exit 1
 fi

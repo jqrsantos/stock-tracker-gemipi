@@ -86,7 +86,12 @@ try:
             st.plotly_chart(fig, use_container_width=True)
 
         # Tabs
-        tab1, tab2, tab3 = st.tabs(["📊 Open Positions", "💰 Realized Gains", "✅ Historical Reports"])
+        tab1, tab2, tab3, tab4 = st.tabs([
+            "📊 Open Positions",
+            "💰 Realized Gains",
+            "🎯 Scouting Performance",
+            "✅ Historical Reports",
+        ])
         
         with tab1:
             if m.get('open_positions'):
@@ -146,6 +151,65 @@ try:
                 st.info("No realized gains yet.")
 
         with tab3:
+            try:
+                scout_res = requests.get(f"{API_URL}/bargains/performance", timeout=10)
+                if scout_res.status_code == 200:
+                    scout_data = scout_res.json()
+                    summary = scout_data.get("summary", {})
+                    picks = scout_data.get("picks", [])
+
+                    if picks:
+                        sc1, sc2, sc3, sc4 = st.columns(4)
+                        sc1.metric("Total Scouted Stocks", summary.get("total_scouted", 0))
+                        sc2.metric("Win Rate", f"{summary.get('win_rate_pct', 0.0):.1f}%")
+                        sc3.metric("Avg Return (Since 1st Pick)", f"{summary.get('avg_return_pct', 0.0):+.2f}%")
+                        best = summary.get("best_pick")
+                        if best:
+                            sc4.metric("Best Scouted Pick", best["ticker"], f"{best['return_pct']:+.2f}%")
+                        else:
+                            sc4.metric("Best Scouted Pick", "N/A")
+
+                        scout_df = pd.DataFrame(picks)
+                        scout_df["first_date"] = pd.to_datetime(scout_df["first_recommended_at"], format="ISO8601").dt.date
+
+                        st.dataframe(
+                            scout_df[[
+                                "ticker",
+                                "name",
+                                "industry",
+                                "first_date",
+                                "days_tracked",
+                                "initial_price",
+                                "current_price",
+                                "currency",
+                                "return_pct",
+                                "times_recommended",
+                                "rationale",
+                            ]],
+                            use_container_width=True,
+                            column_config={
+                                "ticker": "Ticker",
+                                "name": "Company",
+                                "industry": "Industry",
+                                "first_date": st.column_config.DateColumn("First Recommended"),
+                                "days_tracked": st.column_config.NumberColumn("Days Tracked"),
+                                "initial_price": st.column_config.NumberColumn("Initial Price", format="%.2f"),
+                                "current_price": st.column_config.NumberColumn("Current Price", format="%.2f"),
+                                "currency": "Currency",
+                                "return_pct": st.column_config.NumberColumn("Return %", format="%+.2f%%"),
+                                "times_recommended": st.column_config.NumberColumn("Times Picked"),
+                                "rationale": "Latest Moat & News Assessment",
+                            },
+                            hide_index=True,
+                        )
+                    else:
+                        st.info("No scouted stock recommendations recorded yet.")
+                else:
+                    st.warning("Could not load scouting performance data.")
+            except Exception as e:
+                st.error(f"Failed to fetch scouting performance: {e}")
+
+        with tab4:
             REPORTS_DIR = "knowledge_base/daily_reports"
             if os.path.exists(REPORTS_DIR):
                 files = sorted([f for f in os.listdir(REPORTS_DIR) if f.endswith(".md")], reverse=True)

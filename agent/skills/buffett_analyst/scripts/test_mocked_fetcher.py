@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Mocked unit tests for YFinanceFetcher to ensure robust offline testing.
+Unit tests for simplified YFinanceFetcher financial snapshot.
 """
 
 import unittest
@@ -10,387 +10,82 @@ import sys
 import os
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from data_fetcher import YFinanceFetcher
+from data_fetcher import YFinanceFetcher, StockData, is_peaceful_stock
 
-class TestYFinanceFetcherMocked(unittest.TestCase):
+
+class TestSimplifiedFetcher(unittest.TestCase):
     def setUp(self):
         self.fetcher = YFinanceFetcher()
 
-    @patch('yfinance.Ticker')
-    def test_fetch_standard_dcf_mocked(self, mock_ticker_class):
-        """
-        Verify Standard DCF pipeline using fully mocked financial statement data.
-        """
+    def test_peaceful_check(self):
+        self.assertTrue(is_peaceful_stock("Consumer Electronics", "Apple Inc.", "AAPL"))
+        self.assertFalse(is_peaceful_stock("Aerospace & Defense", "Lockheed Martin", "LMT"))
+        self.assertFalse(is_peaceful_stock("Software - Infrastructure", "Palantir Technologies", "PLTR"))
+
+    @patch("data_fetcher.yf.Ticker")
+    def test_fetch_snapshot_metrics(self, mock_ticker_cls):
         mock_ticker = MagicMock()
-        mock_ticker_class.return_value = mock_ticker
-        
-        # 1. Mock Ticker Info
         mock_ticker.info = {
-            "longName": "Test Stable Corp",
-            "industry": "Consumer Goods",
-            "currentPrice": 100.0,
+            "longName": "Apple Inc.",
+            "industry": "Consumer Electronics",
+            "sector": "Technology",
+            "currentPrice": 200.0,
             "currency": "USD",
-            "trailingPE": 15.0,
-            "fiveYearAvgPE": 15.0,
-            "sharesOutstanding": 10000000,
-            "marketCap": 1000000000
+            "fiftyTwoWeekLow": 160.0,
+            "fiftyTwoWeekHigh": 230.0,
+            "trailingPE": 30.0,
+            "forwardPE": 26.5,
+            "fiveYearAvgPE": 28.0,
+            "marketCap": 3000000000000.0,
+            "returnOnEquity": 1.45,
+            "grossMargins": 0.46,
+            "operatingMargins": 0.31,
+            "revenueGrowth": 0.08,
         }
-        
-        # 2. Mock Balance Sheet (Equity = 500M, Debt = 200M, Cash = 100M -> Invested Capital = 600M)
-        mock_ticker.balance_sheet = pd.DataFrame(
-            [[500000000], [200000000], [100000000]],
-            index=["StockholdersEquity", "TotalDebt", "CashAndCashEquivalents"],
-            columns=["2023-12-31"]
-        )
-        
-        # 3. Mock Income Statement (EBIT = 80M, Tax = 16.8M -> NOPAT = 63.2M)
+
+        dates = pd.to_datetime(["2025-09-30", "2024-09-30", "2023-09-30", "2022-09-30"])
         mock_ticker.income_stmt = pd.DataFrame(
-            [[80000000], [16800000], [80000000]],
-            index=["EBIT", "TaxProvision", "PretaxIncome"],
-            columns=["2023-12-31"]
+            {
+                dates[0]: [120e9, 25e9, 125e9, 400e9],
+                dates[1]: [115e9, 24e9, 120e9, 380e9],
+                dates[2]: [110e9, 22e9, 115e9, 360e9],
+                dates[3]: [105e9, 20e9, 110e9, 330e9],
+            },
+            index=["EBIT", "TaxProvision", "PretaxIncome", "TotalRevenue"],
         )
-        
-        # 4. Mock Cashflow (FCF = 60M)
+        mock_ticker.balance_sheet = pd.DataFrame(
+            {
+                dates[0]: [60e9, 100e9],
+                dates[1]: [62e9, 105e9],
+                dates[2]: [60e9, 110e9],
+                dates[3]: [55e9, 115e9],
+            },
+            index=["StockholdersEquity", "TotalDebt"],
+        )
         mock_ticker.cashflow = pd.DataFrame(
-            [[60000000]],
+            {
+                dates[0]: [110e9],
+                dates[1]: [100e9],
+                dates[2]: [95e9],
+                dates[3]: [90e9],
+            },
             index=["FreeCashFlow"],
-            columns=["2023-12-31"]
         )
-        
-        # Execute
-        data = self.fetcher.fetch_data("TEST")
-        
-        # Assertions
-        self.assertIsNotNone(data)
-        self.assertEqual(data.ticker, "TEST")
-        self.assertEqual(data.valuation_methodology, "Standard DCF")
-        self.assertFalse(data.is_too_hard)
-        self.assertGreater(data.roic, 0.08)
-        self.assertGreater(data.intrinsic_value, 0.0)
-        self.assertGreater(data.bargain_price, 0.0)
+        mock_ticker_cls.return_value = mock_ticker
 
-    @patch('yfinance.Ticker')
-    def test_fetch_too_hard_missing_data(self, mock_ticker_class):
-        """
-        Verify that missing sharesOutstanding or invalid pricing is set to 'Too Hard'.
-        """
-        mock_ticker = MagicMock()
-        mock_ticker_class.return_value = mock_ticker
-        
-        mock_ticker.info = {
-            "longName": "Incomplete Corp",
-            "currentPrice": 0.0,
-            "sharesOutstanding": None
-        }
-        mock_ticker.balance_sheet = pd.DataFrame()
-        mock_ticker.income_stmt = pd.DataFrame()
-        mock_ticker.cashflow = pd.DataFrame()
-        
-        data = self.fetcher.fetch_data("INCOMP")
+        data = self.fetcher.fetch_data("AAPL")
         self.assertIsNotNone(data)
-        self.assertTrue(data.is_too_hard)
-        self.assertEqual(data.intrinsic_value, 0.0)
+        self.assertEqual(data.ticker, "AAPL")
+        self.assertEqual(data.name, "Apple Inc.")
+        self.assertTrue(data.is_peaceful)
+        self.assertAlmostEqual(data.gross_margin, 0.46)
+        self.assertAlmostEqual(data.operating_margin, 0.31)
+        self.assertGreater(data.roic, 0.50)
+        self.assertAlmostEqual(data.debt_to_equity, 100e9 / 60e9, places=2)
+        self.assertAlmostEqual(data.fcf_yield, 110e9 / 3000e9, places=4)
+        self.assertEqual(data.fcf_trend, "Growing")
+        self.assertGreater(data.revenue_cagr_3yr, 0.05)
 
-    @patch('yfinance.Ticker')
-    def test_fetch_declining_fcf_is_mid_cycle(self, mock_ticker_class):
-        """
-        Verify that a stock with declining FCF that drops below 80% of median triggers Mid-Cycle Normalized.
-        """
-        mock_ticker = MagicMock()
-        mock_ticker_class.return_value = mock_ticker
-        
-        mock_ticker.info = {
-            "longName": "Declining Corp",
-            "industry": "Consumer Goods",
-            "currentPrice": 50.0,
-            "currency": "USD",
-            "trailingPE": 10.0,
-            "fiveYearAvgPE": 10.0,
-            "sharesOutstanding": 1000000,
-            "marketCap": 50000000
-        }
-        
-        # Decline FCF: newest is 60M (idx 0), oldest is 100M (idx 2)
-        # cashflow index is newest to oldest
-        mock_ticker.cashflow = pd.DataFrame(
-            [[60000000, 80000000, 100000000], [60000000, 80000000, 100000000]], 
-            index=["FreeCashFlow", "FreeCashFlow"],
-            columns=["2023-12-31", "2022-12-31", "2021-12-31"]
-        )
-        mock_ticker.balance_sheet = pd.DataFrame(
-            [[30000000, 30000000, 30000000], [10000000, 10000000, 10000000], [5000000, 5000000, 5000000]],
-            index=["StockholdersEquity", "TotalDebt", "CashAndCashEquivalents"],
-            columns=["2023-12-31", "2022-12-31", "2021-12-31"]
-        )
-        mock_ticker.income_stmt = pd.DataFrame(
-            [[10000000, 10000000, 10000000], [2100000, 2100000, 2100000], [10000000, 10000000, 10000000]],
-            index=["EBIT", "TaxProvision", "PretaxIncome"],
-            columns=["2023-12-31", "2022-12-31", "2021-12-31"]
-        )
-        
-        data = self.fetcher.fetch_data("DECL")
-        self.assertIsNotNone(data)
-        self.assertFalse(data.is_too_hard)
-        self.assertEqual(data.valuation_methodology, "Mid-Cycle Normalized")
-        
-    @patch('yfinance.Ticker')
-    def test_fetch_negative_median_fcf_is_too_hard(self, mock_ticker_class):
-        """
-        Verify that a stock with negative multi-year median FCF is marked as Too Hard.
-        """
-        mock_ticker = MagicMock()
-        mock_ticker_class.return_value = mock_ticker
-        
-        mock_ticker.info = {
-            "longName": "Negative FCF Corp",
-            "industry": "Consumer Goods",
-            "currentPrice": 50.0,
-            "currency": "USD",
-            "trailingPE": 10.0,
-            "fiveYearAvgPE": 10.0,
-            "sharesOutstanding": 1000000,
-            "marketCap": 50000000
-        }
-        
-        # FCF: [10M, -60M, -80M] -> Median is -60M
-        # With fcf_history[0] = 10M, it bypasses the Category 2 fcf_history[0] <= 0 check
-        mock_ticker.cashflow = pd.DataFrame(
-            [[10000000, -60000000, -80000000], [10000000, -60000000, -80000000]], 
-            index=["FreeCashFlow", "FreeCashFlow"],
-            columns=["2023-12-31", "2022-12-31", "2021-12-31"]
-        )
-        mock_ticker.balance_sheet = pd.DataFrame(
-            [[30000000, 30000000, 30000000], [10000000, 10000000, 10000000], [5000000, 5000000, 5000000]],
-            index=["StockholdersEquity", "TotalDebt", "CashAndCashEquivalents"],
-            columns=["2023-12-31", "2022-12-31", "2021-12-31"]
-        )
-        mock_ticker.income_stmt = pd.DataFrame(
-            [[10000000, 10000000, 10000000], [2100000, 2100000, 2100000], [10000000, 10000000, 10000000]],
-            index=["EBIT", "TaxProvision", "PretaxIncome"],
-            columns=["2023-12-31", "2022-12-31", "2021-12-31"]
-        )
-        
-        data = self.fetcher.fetch_data("NEG")
-        self.assertIsNotNone(data)
-        self.assertTrue(data.is_too_hard)
-        self.assertIn("Negative multi-year median", data.error_message)
-
-    @patch('yfinance.Ticker')
-    def test_fetch_cash_rich_roic_fallback(self, mock_ticker_class):
-        """
-        Verify that a cash-rich stock does not get 0% ROIC due to negative invested capital.
-        """
-        mock_ticker = MagicMock()
-        mock_ticker_class.return_value = mock_ticker
-        
-        # Cash-rich setup: equity = 10M, debt = 20M, cash = 35M -> invested_capital = -5M
-        mock_ticker.info = {
-            "longName": "Cash Rich Corp",
-            "industry": "Consumer Goods",
-            "currentPrice": 50.0,
-            "currency": "USD",
-            "trailingPE": 15.0,
-            "fiveYearAvgPE": 15.0,
-            "sharesOutstanding": 1000000,
-            "marketCap": 50000000
-        }
-        mock_ticker.cashflow = pd.DataFrame(
-            [[10000000, 10000000, 10000000], [10000000, 10000000, 10000000]], 
-            index=["FreeCashFlow", "FreeCashFlow"],
-            columns=["2023-12-31", "2022-12-31", "2021-12-31"]
-        )
-        mock_ticker.balance_sheet = pd.DataFrame(
-            [[10000000, 10000000, 10000000], [20000000, 20000000, 20000000], [35000000, 35000000, 35000000]],
-            index=["StockholdersEquity", "TotalDebt", "CashAndCashEquivalents"],
-            columns=["2023-12-31", "2022-12-31", "2021-12-31"]
-        )
-        mock_ticker.income_stmt = pd.DataFrame(
-            [[10000000, 10000000, 10000000], [2100000, 2100000, 2100000], [10000000, 10000000, 10000000]],
-            index=["EBIT", "TaxProvision", "PretaxIncome"],
-            columns=["2023-12-31", "2022-12-31", "2021-12-31"]
-        )
-        
-        data = self.fetcher.fetch_data("RICH")
-        self.assertIsNotNone(data)
-        # NOPAT = 7.9M. Fallback Invested Capital = Equity + Debt = 30M.
-        # Expected ROIC = 7.9M / 30M = ~26.3%
-        self.assertGreater(data.roic, 0.0)
-        self.assertAlmostEqual(data.roic, 7900000.0 / 30000000.0, places=4)
-
-    @patch('yfinance.Ticker')
-    def test_fetch_flat_cagr(self, mock_ticker_class):
-        """
-        Verify that flat FCF (CAGR = 0.0) calculates expected growth rate of 0.0 instead of defaulting to 8%.
-        """
-        mock_ticker = MagicMock()
-        mock_ticker_class.return_value = mock_ticker
-        
-        mock_ticker.info = {
-            "longName": "Flat Corp",
-            "industry": "Utilities",
-            "currentPrice": 100.0,
-            "currency": "USD",
-            "trailingPE": 15.0,
-            "fiveYearAvgPE": 15.0,
-            "sharesOutstanding": 1000000,
-            "marketCap": 100000000
-        }
-        mock_ticker.cashflow = pd.DataFrame(
-            [[50000000, 50000000, 50000000]], 
-            index=["FreeCashFlow"],
-            columns=["2023-12-31", "2022-12-31", "2021-12-31"]
-        )
-        mock_ticker.balance_sheet = pd.DataFrame(
-            [[50000000, 50000000, 50000000], [20000000, 20000000, 20000000], [10000000, 10000000, 10000000]],
-            index=["StockholdersEquity", "TotalDebt", "CashAndCashEquivalents"],
-            columns=["2023-12-31", "2022-12-31", "2021-12-31"]
-        )
-        mock_ticker.income_stmt = pd.DataFrame(
-            [[10000000, 10000000, 10000000], [2100000, 2100000, 2100000], [10000000, 10000000, 10000000]],
-            index=["EBIT", "TaxProvision", "PretaxIncome"],
-            columns=["2023-12-31", "2022-12-31", "2021-12-31"]
-        )
-        
-        data = self.fetcher.fetch_data("TESTFLAT")
-        self.assertIsNotNone(data)
-        self.assertEqual(data.expected_growth_rate, 0.0)
-
-    @patch('yfinance.Ticker')
-    def test_fetch_recent_negative_fcf_allowed(self, mock_ticker_class):
-        """
-        Verify that a stock with negative recent FCF but positive multi-year median FCF
-        is not marked as Too Hard, but instead valued appropriately.
-        """
-        mock_ticker = MagicMock()
-        mock_ticker_class.return_value = mock_ticker
-        
-        mock_ticker.info = {
-            "longName": "Temporary Hiccup Corp",
-            "industry": "Software",
-            "currentPrice": 50.0,
-            "currency": "USD",
-            "trailingPE": 40.0,
-            "fiveYearAvgPE": 40.0,
-            "sharesOutstanding": 1000000,
-            "marketCap": 50000000
-        }
-        
-        # FCF: [-10M, 40M, 50M] -> Median is 40M, recent is -10M.
-        mock_ticker.cashflow = pd.DataFrame(
-            [[-10000000, 40000000, 50000000], [-10000000, 40000000, 50000000]], 
-            index=["FreeCashFlow", "FreeCashFlow"],
-            columns=["2023-12-31", "2022-12-31", "2021-12-31"]
-        )
-        mock_ticker.balance_sheet = pd.DataFrame(
-            [[30000000, 30000000, 30000000], [10000000, 10000000, 10000000], [5000000, 5000000, 5000000]],
-            index=["StockholdersEquity", "TotalDebt", "CashAndCashEquivalents"],
-            columns=["2023-12-31", "2022-12-31", "2021-12-31"]
-        )
-        mock_ticker.income_stmt = pd.DataFrame(
-            [[10000000, 10000000, 10000000], [2100000, 2100000, 2100000], [10000000, 10000000, 10000000]],
-            index=["EBIT", "TaxProvision", "PretaxIncome"],
-            columns=["2023-12-31", "2022-12-31", "2021-12-31"]
-        )
-        
-        data = self.fetcher.fetch_data("HICCUP")
-        self.assertIsNotNone(data)
-        # Should not be 'too hard' simply due to recent negative FCF
-        self.assertFalse(data.is_too_hard)
-
-    @patch('yfinance.Ticker')
-    def test_fetch_category_2_hijack_avoided(self, mock_ticker_class):
-        """
-        Verify that a stock with high ROIC is not hijacked into Category 2
-        just because of a single negative recent FCF.
-        """
-        mock_ticker = MagicMock()
-        mock_ticker_class.return_value = mock_ticker
-        
-        mock_ticker.info = {
-            "longName": "Mature Compounder Corp",
-            "industry": "Software",
-            "currentPrice": 50.0,
-            "currency": "USD",
-            "trailingPE": 40.0,
-            "fiveYearAvgPE": 40.0,
-            "sharesOutstanding": 1000000,
-            "marketCap": 50000000
-        }
-        
-        # FCF: [-10M, 40M, 50M] -> Median is 40M, recent is -10M.
-        mock_ticker.cashflow = pd.DataFrame(
-            [[-10000000, 40000000, 50000000], [-10000000, 40000000, 50000000]], 
-            index=["FreeCashFlow", "FreeCashFlow"],
-            columns=["2023-12-31", "2022-12-31", "2021-12-31"]
-        )
-        mock_ticker.balance_sheet = pd.DataFrame(
-            [[30000000, 30000000, 30000000], [10000000, 10000000, 10000000], [5000000, 5000000, 5000000]],
-            index=["StockholdersEquity", "TotalDebt", "CashAndCashEquivalents"],
-            columns=["2023-12-31", "2022-12-31", "2021-12-31"]
-        )
-        mock_ticker.income_stmt = pd.DataFrame(
-            [[10000000, 10000000, 10000000], [2100000, 2100000, 2100000], [10000000, 10000000, 10000000]],
-            index=["EBIT", "TaxProvision", "PretaxIncome"],
-            columns=["2023-12-31", "2022-12-31", "2021-12-31"]
-        )
-        
-        data = self.fetcher.fetch_data("NOHIJACK")
-        self.assertIsNotNone(data)
-        # It should value it using Standard DCF (Category 1 or 3), not Mid-Cycle (Category 2)
-        # Because we're passing it to standard DCF logic (from Task 1)
-        self.assertNotEqual(data.valuation_methodology, "Mid-Cycle Normalized")
-
-    @patch('yfinance.Ticker')
-    def test_roic_missing_data_exclusion(self, mock_ticker_class):
-        """
-        Verify that years with missing structural data (ebit=0 and equity=0) are excluded from ROIC calculation.
-        """
-        mock_ticker = MagicMock()
-        mock_ticker_class.return_value = mock_ticker
-        
-        mock_ticker.info = {
-            "longName": "Missing Data Corp",
-            "industry": "Software",
-            "currentPrice": 50.0,
-            "currency": "USD",
-            "trailingPE": 15.0,
-            "fiveYearAvgPE": 15.0,
-            "sharesOutstanding": 1000000,
-            "marketCap": 50000000
-        }
-        
-        # 4 years of data, where index 2 (2021) has missing data (0s)
-        # Cash flow just to prevent other errors
-        mock_ticker.cashflow = pd.DataFrame(
-            [[10000000, 10000000, 10000000, 10000000]], 
-            index=["FreeCashFlow"],
-            columns=["2023-12-31", "2022-12-31", "2021-12-31", "2020-12-31"]
-        )
-        
-        # Balance sheet
-        mock_ticker.balance_sheet = pd.DataFrame(
-            [[500, 500, 0, 500], [100, 100, 0, 100], [0, 0, 0, 0]],
-            index=["StockholdersEquity", "TotalDebt", "CashAndCashEquivalents"],
-            columns=["2023-12-31", "2022-12-31", "2021-12-31", "2020-12-31"]
-        )
-        
-        # Income stmt
-        mock_ticker.income_stmt = pd.DataFrame(
-            [[100, 120, 0, 150], [20, 25, 0, 30], [100, 120, 0, 150]],
-            index=["EBIT", "TaxProvision", "PretaxIncome"],
-            columns=["2023-12-31", "2022-12-31", "2021-12-31", "2020-12-31"]
-        )
-        
-        data = self.fetcher.fetch_data("MISSING")
-        self.assertIsNotNone(data)
-        
-        # Expected ROICs:
-        # 2023: 80 / 600 = 0.1333...
-        # 2022: 95 / 600 = 0.1583...
-        # 2021: Skipped due to strict exclusion
-        # 2020: 120 / 600 = 0.20
-        # Median of [0.1333, 0.1583, 0.20] = 0.15833...
-        self.assertAlmostEqual(data.roic, 95 / 600, places=4)
 
 if __name__ == "__main__":
     unittest.main()

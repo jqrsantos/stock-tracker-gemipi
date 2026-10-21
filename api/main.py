@@ -54,9 +54,9 @@ class BargainCreate(BaseModel):
     industry: str
     current_price: Decimal
     currency: str = "USD"
-    bargain_price: Decimal
-    fair_price: Decimal
-    expensive_price: Decimal
+    bargain_price: Decimal = Decimal("0.0")
+    fair_price: Decimal = Decimal("0.0")
+    expensive_price: Decimal = Decimal("0.0")
     rationale: str
 
 class BargainResponse(BaseModel):
@@ -333,3 +333,108 @@ def get_bargains(db: Session = Depends(get_db)):
     except Exception as e:
         logger.error(f"Error fetching bargains: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def compute_scouting_performance(bargain_rows: list, live_prices: dict, now: Optional[datetime] = None) -> dict:
+    if not bargain_rows:
+        return {
+            "summary": {
+                "total_scouted": 0,
+                "win_rate_pct": 0.0,
+                "avg_return_pct": 0.0,
+                "best_pick": None,
+                "worst_pick": None,
+            },
+            "picks": [],
+        }
+
+    now_dt = now or datetime.utcnow()
+    # Sort ascending by timestamp so first occurrence is Day 1 recommendation
+    sorted_rows = sorted(bargain_rows, key=lambda r: r.timestamp or now_dt)
+
+    grouped = {}
+    for row in sorted_rows:
+        t = row.ticker.upper()
+        if t not in grouped:
+            grouped[t] = {
+                "ticker": t,
+                "name": row.name,
+                "industry": row.industry,
+                "currency": row.currency or "USD",
+                "first_recommended_at": row.timestamp or now_dt,
+                "initial_price": float(row.current_price),
+                "latest_recorded_price": float(row.current_price),
+                "rationale": row.rationale,
+                "times_recommended": 1,
+            }
+        else:
+            grouped[t]["latest_recorded_price"] = float(row.current_price)
+            grouped[t]["rationale"] = row.rationale
+            grouped[t]["times_recommended"] += 1
+
+    picks = []
+    for t, info in grouped.items():
+        initial_p = info["initial_price"]
+        live_p = live_prices.get(t)
+        if live_p is None or live_p <= 0:
+            live_p = info["latest_recorded_price"]
+
+        ret_pct = ((live_p - initial_p) / initial_p * 100.0) if initial_p > 0 else 0.0
+        days = max(0, (now_dt - info["first_recommended_at"]).days)
+
+        picks.append(
+            {
+                "ticker": t,
+                "name": info["name"],
+                "industry": info["industry"],
+                "currency": info["currency"],
+                "first_recommended_at": info["first_recommended_at"].isoformat(),
+                "days_tracked": days,
+                "initial_price": round(initial_p, 2),
+                "current_price": round(float(live_p), 2),
+                "return_pct": round(ret_pct, 2),
+                "times_recommended": info["times_recommended"],
+                "rationale": info["rationale"],
+            }
+        )
+
+    picks.sort(key=lambda x: x["return_pct"], reverse=True)
+    total = len(picks)
+    wins = sum(1 for p in picks if p["return_pct"] > 0)
+    win_rate = round((wins / total) * 100.0, 2) if total > 0 else 0.0
+    avg_ret = round(sum(p["return_pct"] for p in picks) / total, 2) if total > 0 else 0.0
+
+    best_pick = {"ticker": picks[0]["ticker"], "return_pct": picks[0]["return_pct"]} if picks else None
+    worst_pick = {"ticker": picks[-1]["ticker"], "return_pct": picks[-1]["return_pct"]} if picks else None
+
+    return {
+        "summary": {
+            "total_scouted": total,
+            "win_rate_pct": win_rate,
+            "avg_return_pct": avg_ret,
+            "best_pick": best_pick,
+            "worst_pick": worst_pick,
+        },
+        "picks": picks,
+    }
+
+
+@app.get("/bargains/performance")
+def get_bargains_performance(db: Session = Depends(get_db)):
+    try:
+        rows = db.query(models.Bargain).order_by(models.Bargain.timestamp.asc()).all()
+        unique_tickers = sorted({r.ticker.upper() for r in rows})
+        live_prices = {}
+        for t in unique_tickers:
+            try:
+                price, _ = fetch_stock_info(t)
+                if price is not None:
+                    live_prices[t] = price
+            except Exception as e:
+                logger.warning(f"Failed live price lookup for scouted stock {t}: {e}")
+
+        return compute_scouting_performance(rows, live_prices)
+    except Exception as e:
+        logger.error(f"Error computing scouting performance: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+

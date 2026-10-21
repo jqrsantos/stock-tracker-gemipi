@@ -10,8 +10,6 @@ USER_HOME="${HOME:-$(cd ~ && pwd)}"
 # Ensure local bin directories are in PATH, especially when run via cron
 export PATH="$USER_HOME/.local/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"
 
-# Fetch current unique tickers from the API
-# Use full paths for cron reliability
 CURL_BIN=$(command -v curl || echo "/usr/bin/curl")
 JQ_BIN=$(command -v jq || echo "/usr/bin/jq")
 
@@ -29,21 +27,21 @@ fi
 # 2. Execute Antigravity CLI (agy) to perform the financial research
 AGY_BIN=$(command -v agy || echo "$USER_HOME/.local/bin/agy")
 
-if ! "$AGY_BIN" --prompt "You are a senior financial research agent. Use your 'Buffett Strategic Analyst' skill to perform a Deep Scour of the current portfolio: ($PORTFOLIO_TICKERS) and find bargains.
-1. Perform web searches to identify 5-10 undervalued high-quality compounders, stocks hitting 52-week lows, or sector-specific opportunities (excluding defense/espionage).
-2. Combine these dynamically searched tickers with the portfolio tickers.
-3. Run filter_stocks.py passing all these tickers as command line arguments (e.g. 'python3 filter_stocks.py AAPL MSFT HPQ ...'). If no arguments are passed, it runs on the baseline.
-4. Apply the dynamic valuation strategy (Stable DCF, Reverse DCF, or Normalized Mid-Cycle averages) depending on the stock's business category (predictable, hyper-growth, or cyclical). If FCF growth is negative, classify it as 'Too Hard' to value.
-5. STRICT MANDATE: Exclude all non-peaceful stocks (defense/munitions/tactical surveillance).
-6. Persist identified bargains with their calculated dynamic price intervals (Bargain, Fair, Expensive) using 'POST /bargains/'.
-7. Update the knowledge base and active memory, and write the final report. Print 'REPORT_COMPLETE' when finished." --dangerously-skip-permissions; then
+if ! "$AGY_BIN" --print-timeout 15m --prompt "You are a senior financial research agent. Use your 'buffett_analyst' skill (agent/skills/buffett_analyst/SKILL.md) to generate today's report.
+1. Read knowledge_base/active_memory.md and search the web for the latest geopolitical and global economy news across major economies (US, EU, China, Japan). Update active_memory.md using manage_memory.py.
+2. Scout 2-3 high-quality peaceful market opportunities based on recent news catalysts and strong fundamentals (strictly excluding defense/weapons/surveillance).
+3. Run 'python3 agent/skills/buffett_analyst/scripts/evaluate_stock.py' for all current portfolio tickers ($PORTFOLIO_TICKERS) and your 2-3 scouted tickers to get their Moat & Financial Performance snapshots.
+4. Search recent company news for the portfolio holdings and scouted stocks, and connect their Moat + Financial Performance + Recent News to assess each company (BUY, HOLD, SELL, or AVOID).
+5. Record each of today's 2-3 scouted stocks via 'POST http://localhost:8000/bargains/' (with ticker, name, industry, current_price, currency, rationale).
+6. Query 'GET http://localhost:8000/bargains/performance' to retrieve the Day-1 scouting performance scorecard.
+7. Write the complete daily report to knowledge_base/daily_reports/\$(date +%F)-report.md with sections: [MACRO & GEOPOLITICAL BRIEFING], [PORTFOLIO ASSESSMENT], [SCOUTED OPPORTUNITIES], and [SCOUTING PERFORMANCE]. Print 'REPORT_COMPLETE' when finished." --dangerously-skip-permissions; then
   echo "Error: Financial research run failed." >&2
   exit 1
 fi
 
-# 3. Trigger notification sequentially using repository virtualenv python binary
-echo "Research complete. Triggering daily report notifications..."
+# 3. Trigger email-only notification sequentially using repository virtualenv python binary
+echo "Research complete. Sending daily report via email..."
 if ! "$SCRIPT_DIR/.venv/bin/python" "$SCRIPT_DIR/agent/notifier.py"; then
-  echo "Error: Notification script failed." >&2
+  echo "Error: Email notification script failed." >&2
   exit 1
 fi

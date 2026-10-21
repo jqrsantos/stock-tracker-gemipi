@@ -98,3 +98,60 @@ def test_get_exchange_rate_simplification():
     assert get_exchange_rate("EUR", "EUR") == 1.0
     assert get_exchange_rate("USD", "USD") == 1.0
 
+
+from main import BargainCreate, compute_scouting_performance
+
+
+def test_bargain_create_without_dcf_bounds():
+    b = BargainCreate(
+        ticker="ASML",
+        name="ASML Holding",
+        industry="Semiconductors",
+        current_price=Decimal("850.00"),
+        currency="EUR",
+        rationale="Monopoly EUV lithography moat with strong backlog.",
+    )
+    assert b.ticker == "ASML"
+    assert b.bargain_price == Decimal("0.0")
+    assert b.fair_price == Decimal("0.0")
+    assert b.expensive_price == Decimal("0.0")
+
+
+def test_compute_scouting_performance_preserves_first_day_price():
+    class MockBargainRow:
+        def __init__(self, ticker, name, industry, current_price, currency, rationale, timestamp):
+            self.ticker = ticker
+            self.name = name
+            self.industry = industry
+            self.current_price = Decimal(str(current_price))
+            self.currency = currency
+            self.rationale = rationale
+            self.timestamp = timestamp
+
+    t1 = datetime(2026, 5, 1, 10, 0, 0)
+    t2 = datetime(2026, 6, 1, 10, 0, 0)
+    rows = [
+        MockBargainRow("ADBE", "Adobe Inc.", "Software", 400.0, "USD", "Initial pick rationale", t1),
+        MockBargainRow("ADBE", "Adobe Inc.", "Software", 440.0, "USD", "Updated rationale in June", t2),
+        MockBargainRow("NVO", "Novo Nordisk", "Biotech", 120.0, "USD", "GLP-1 moat", t2),
+    ]
+
+    live_prices = {"ADBE": 500.0, "NVO": 108.0}
+    result = compute_scouting_performance(rows, live_prices, now=datetime(2026, 7, 1, 10, 0, 0))
+
+    assert result["summary"]["total_scouted"] == 2
+    assert result["summary"]["win_rate_pct"] == 50.0
+    # ADBE: (500 - 400)/400 = +25.0%, NVO: (108 - 120)/120 = -10.0% -> avg = +7.5%
+    assert abs(result["summary"]["avg_return_pct"] - 7.5) < 0.01
+    assert result["summary"]["best_pick"]["ticker"] == "ADBE"
+    assert result["summary"]["worst_pick"]["ticker"] == "NVO"
+
+    adbe_pick = next(p for p in result["picks"] if p["ticker"] == "ADBE")
+    assert adbe_pick["initial_price"] == 400.0
+    assert adbe_pick["current_price"] == 500.0
+    assert adbe_pick["return_pct"] == 25.0
+    assert adbe_pick["times_recommended"] == 2
+    assert adbe_pick["rationale"] == "Updated rationale in June"
+    assert adbe_pick["days_tracked"] == 61
+
+

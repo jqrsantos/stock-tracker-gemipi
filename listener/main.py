@@ -1,9 +1,7 @@
 import os
 import subprocess
 import logging
-import smtplib
 import requests
-from email.message import EmailMessage
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
 
@@ -12,35 +10,13 @@ logger = logging.getLogger(__name__)
 
 AUTHORIZED_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-def send_email(subject, body):
-    server_addr = os.getenv("SMTP_SERVER")
-    port = os.getenv("SMTP_PORT")
-    user = os.getenv("SMTP_USER")
-    password = os.getenv("SMTP_PASSWORD")
-    email_to = os.getenv("EMAIL_TO")
-    
-    if not all([server_addr, port, user, password, email_to]):
-        logger.warning("SMTP credentials missing. Email not sent.")
-        return
 
-    msg = EmailMessage()
-    msg.set_content(body)
-    msg["Subject"] = subject
-    msg["From"] = user
-    msg["To"] = email_to
+async def send_chunked_reply(update: Update, text: str):
+    chunk_size = 4000
+    text = text.strip() or "No response generated."
+    for i in range(0, len(text), chunk_size):
+        await update.message.reply_text(text[i : i + chunk_size])
 
-    try:
-        port = int(port)
-        if port == 465:
-            server = smtplib.SMTP_SSL(server_addr, port)
-        else:
-            server = smtplib.SMTP(server_addr, port)
-            server.starttls()
-        server.login(user, password)
-        server.send_message(msg)
-        server.quit()
-    except Exception as e:
-        logger.error(f"Email failed: {e}")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = str(update.effective_chat.id)
@@ -48,9 +24,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.warning(f"Unauthorized access from {chat_id}")
         return
 
-    ticker = update.message.text.strip().upper()
-    await update.message.reply_text(f"🔍 Investigating {ticker} through the Buffett Strategic Analyst lens... This may take a minute.")
-    
+    user_input = update.message.text.strip()
+    ticker = user_input.upper()
+    await update.message.reply_text(
+        f"🔍 Evaluating {ticker} (Moat + Financial Performance + Recent News)... This may take a minute."
+    )
+
     # 1. Fetch current holdings for context
     holdings_context = "No holdings data available."
     api_url = os.getenv("API_URL", "http://localhost:8000")
@@ -69,83 +48,80 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 2. Read active memory for macro context
     active_memory = ""
     try:
-        # Assuming run from project root
         with open("knowledge_base/active_memory.md", "r") as f:
             active_memory = f.read()
     except Exception as e:
         logger.warning(f"Could not read active_memory.md: {e}")
 
     prompt = (
-        f"You are the 'Buffett Strategic Analyst'. Investigate '{ticker}' using value investing principles.\n\n"
+        f"You are the 'Buffett Strategic Analyst'. Evaluate '{ticker}' by connecting its competitive moat, "
+        f"financial performance snapshot, and recent company/macro news.\n\n"
         f"**Context:**\n"
         f"- {holdings_context}\n"
-        f"- **Active Memory (Macro):**\n{active_memory}\n\n"
+        f"- **Active Memory (Macro & Geopolitics):**\n{active_memory}\n\n"
         f"**Instructions:**\n"
-        f"1. Run the python script 'agent/skills/buffett_analyst/scripts/evaluate_stock.py' for '{ticker}' to fetch its real-time financials and dynamic valuation metrics. DO NOT use superficial web searches or perform custom manual DCF calculations.\n"
-        f"2. Read the console output of the script to extract the exact calculated values:\n"
-        f"   - ROIC, Debt to Equity, and FCF Yield.\n"
-        f"   - Valuation Methodology (e.g., Standard DCF, Reverse DCF, or Mid-Cycle Normalized).\n"
-        f"   - Intrinsic Value / Fair Price, Bargain Price, and Expensive Price.\n"
-        f"   - If 'Is Too Hard' is True, classify the stock as 'Too Hard' to value and return an AVOID/HOLD with the script's warning message.\n"
-        f"3. Apply the 'Buffett Check' using the script's exact metrics. Note that ROIC > 15% and Debt/Equity < 1.0 are the standards, but follow the script's advice if it overrides them based on stock categorization (e.g. cyclical/hyper-growth exceptions).\n"
-        f"4. **52-Week High Protocol:** If a stock is trading near its 52-week high, DO NOT automatically classify it as a SELL. High-quality compounders frequently hit new highs. Instead, escalate the stock for further investigation, closely examine its intrinsic value versus current price, and maintain a HOLD or BUY unless the quantitative script explicitly flags the valuation as 'Expensive'.\n"
-        f"5. **STRICT MANDATE:** Verify if the company is 'Peaceful'.\n"
-        f"   - STRICTLY EXCLUDE: Companies that directly manufacture weapon systems, munitions, firearms, tactical hardware, military explosives, nuclear weapons, or warships (e.g., Lockheed Martin, Raytheon, Northrop Grumman), AND companies producing specialized software or systems designed specifically for intelligence, espionage, surveillance, warfare, and tactical combat operations (e.g., Palantir).\n"
-        f"   - EXPLICITLY ALLOW: Companies producing general-purpose or dual-use technologies (e.g., standard consumer electronics, microchips, GPUs, enterprise software, general search/cloud infrastructure, commercial aviation) even if they have partnerships, research relationships, or general contracts with defense departments (e.g., NVIDIA, Microsoft, Google), unless their direct products are weapons or dedicated combat/espionage systems. If the stock is NOT peaceful according to these exact guidelines, your Action must be 'SELL' or 'AVOID' with a clear warning.\n"
-        f"6. Do NOT run any external notification scripts (like notifier.py). Your response will be handled by the caller.\n"
-        f"7. Format your response exactly like this:\n\n"
-        f"--- TELEGRAM SUMMARY ---\n"
-        f"**Target Stock:** {ticker} - $PRICE\n"
-        f"**Action:** BUY/HOLD/SELL/AVOID\n"
-        f"**Buffett Lens:** 1-2 sentences on quality, moat, and ROIC.\n"
-        f"**Rationale:** 1 sentence on current valuation/timing.\n"
-        f"========================\n"
-        f"**Portfolio Fit:** How this stock complements or conflicts with existing holdings ({holdings_context}).\n"
-        f"**Macro Alignment:** How this fits with the trends in Active Memory.\n\n"
-        f"--- FULL REPORT ---\n"
-        f"[Your deep dive analysis here, including fundamental metrics and 'Peaceful' status check]"
+        f"1. Run `python3 agent/skills/buffett_analyst/scripts/evaluate_stock.py {ticker}` to get its financial performance snapshot "
+        f"(Gross/Operating Margins, ROIC, ROE, Debt/Equity, FCF Yield & Trend, Revenue Growth, and P/E vs 5Y Average).\n"
+        f"2. Perform a web search for recent news, earnings catalysts, and competitive developments for '{ticker}'.\n"
+        f"3. **STRICT PEACEFUL MANDATE:** Exclude companies manufacturing weapons, munitions, defense hardware, or dedicated military/espionage surveillance systems (e.g., Lockheed Martin, Raytheon, Palantir). Dual-use commercial tech (e.g., Apple, Microsoft, NVIDIA) is allowed. If non-peaceful, Action MUST be AVOID/SELL.\n"
+        f"4. Connect your findings into a clear assessment without inventing rigid DCF price bounds:\n"
+        f"   - Assess the **Moat** (Switching Costs, Brand, Network Effects, Cost/Tech Advantage) backed by margins & ROIC.\n"
+        f"   - Assess **Financial Health & Relative Valuation** (balance sheet D/E, FCF generation, growth, and current P/E vs 5-yr average).\n"
+        f"   - Connect with **Recent News & Global Macro**.\n"
+        f"5. Do NOT run any external notification scripts. Format your response between the markers below:\n\n"
+        f"--- TELEGRAM RESPONSE ---\n"
+        f"🎯 **{ticker} — [Company Name]** ([Current Price] [Currency])\n"
+        f"**Verdict:** BUY / HOLD / SELL / AVOID\n\n"
+        f"🏰 **Moat Assessment:** [2-3 sentences on competitive advantage & margin/ROIC durability]\n\n"
+        f"📊 **Financial Snapshot:**\n"
+        f"• Margins (Gross / Op): [X% / Y%]\n"
+        f"• ROIC / ROE: [X% / Y%]\n"
+        f"• Balance Sheet & Cash: D/E [X] | FCF Yield [Y%] ([Trend])\n"
+        f"• Growth & Valuation: Rev YoY [X%] | P/E [X] vs 5Y Avg [Y]\n\n"
+        f"📰 **News & Macro Synthesis:** [How recent company news and global macro trends connect to the numbers]\n\n"
+        f"💼 **Portfolio Fit:** [How it fits with {holdings_context}]\n"
+        f"--- END RESPONSE ---"
     )
-    
+
     try:
-        # Use agy CLI with --dangerously-skip-permissions for autonomous research
-        result = subprocess.run(["agy", "--prompt", prompt, "--dangerously-skip-permissions"], capture_output=True, text=True, timeout=180)
-        
+        result = subprocess.run(
+            ["agy", "--prompt", prompt, "--dangerously-skip-permissions"],
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+
         if result.returncode == 0:
             output = result.stdout
-            parts = output.split("--- FULL REPORT ---")
-            
-            # Extract only the summary inside the --- TELEGRAM SUMMARY --- block, ignoring model preambles/verbosity
-            if "--- TELEGRAM SUMMARY ---" in output:
-                summary_part = output.split("--- TELEGRAM SUMMARY ---")[1]
-                summary = summary_part.split("--- FULL REPORT ---")[0].strip()
+            if "--- TELEGRAM RESPONSE ---" in output:
+                reply_text = output.split("--- TELEGRAM RESPONSE ---")[1].split("--- END RESPONSE ---")[0].strip()
             else:
-                summary = parts[0].replace("--- TELEGRAM SUMMARY ---", "").strip()
-                
-            full_report = parts[1].strip() if len(parts) > 1 else output
-            
-            await update.message.reply_text(summary[:4000])
-            send_email(f"Stock Investigation: {ticker}", full_report)
+                reply_text = output.strip()
+
+            await send_chunked_reply(update, reply_text)
         else:
             logger.error(f"Antigravity CLI (agy) Error: {result.stderr}")
-            await update.message.reply_text("❌ An error occurred while generating the report. Please check the server logs.")
-            
+            await update.message.reply_text("❌ An error occurred while generating the evaluation. Please check the server logs.")
+
     except subprocess.TimeoutExpired:
         await update.message.reply_text("⏱️ The investigation timed out.")
     except Exception as e:
         logger.error(f"Unexpected Error: {e}")
         await update.message.reply_text("⚠️ An unexpected internal error occurred.")
 
+
 def main():
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     if not token or not AUTHORIZED_CHAT_ID:
         logger.error("Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID")
         return
-        
+
     app = ApplicationBuilder().token(token).build()
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
-    
-    logger.info("Starting Telegram Listener...")
+
+    logger.info("Starting Telegram Listener (Telegram-only reply mode)...")
     app.run_polling()
+
 
 if __name__ == "__main__":
     main()

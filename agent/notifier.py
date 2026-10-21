@@ -45,18 +45,18 @@ def extract_tldr(markdown_text: str) -> str:
     Extracts key highlights from the report to create a concise TL;DR block.
     """
     highlights = []
-    # Look for GLOBAL NARRATIVE highlights or key sentences
-    narrative_section = re.search(r"## \[(GLOBAL NARRATIVE|MACRO DASHBOARD)\]\s*(.*?)(?=##|$)", markdown_text, re.DOTALL)
+    # Look for GLOBAL NARRATIVE / MACRO DASHBOARD / MACRO & GEOPOLITICAL BRIEFING highlights
+    narrative_section = re.search(r"## \[(GLOBAL NARRATIVE|MACRO DASHBOARD|MACRO & GEOPOLITICAL BRIEFING)\]\s*(.*?)(?=##|$)", markdown_text, re.DOTALL)
     if narrative_section:
         text = narrative_section.group(2).strip()
         sentences = re.split(r'\.(?=\s+[A-Z]|\s*$)', text)
         sentences = [s.strip() + "." for s in sentences if len(s.strip()) > 10]
         highlights.extend(sentences[:2])
     
-    # Look for Bargain Radar picks
-    radar_section = re.search(r"## \[BARGAIN RADAR\]\s*(.*?)(?=##|$)", markdown_text, re.DOTALL)
+    # Look for Bargain Radar / Scouted Opportunities picks
+    radar_section = re.search(r"## \[(BARGAIN RADAR|SCOUTED OPPORTUNITIES)\]\s*(.*?)(?=##|$)", markdown_text, re.DOTALL)
     if radar_section:
-        picks = re.findall(r"\d+\.\s+\*\*([A-Z]+)\b", radar_section.group(1))
+        picks = re.findall(r"\d+\.\s+\*\*([A-Z]+)\b", radar_section.group(2))
         if picks:
             highlights.append(f"Highlighted moated bargains: {', '.join(picks)}")
             
@@ -81,8 +81,9 @@ def format_stock_cards(html_content: str) -> str:
         header_text = match.group(1).strip()
         ul_content = match.group(2).strip()
         
-        # Check if this is a stock health card by verifying if ROIC is mentioned in the list
-        if "ROIC" not in ul_content and "roic" not in ul_content.lower():
+        # Check if this is a stock health card by verifying if ROIC or Moat is mentioned in the list
+        ul_lower = ul_content.lower()
+        if "roic" not in ul_lower and "moat" not in ul_lower:
             return match.group(0) # Keep original HTML unchanged
             
         # 1. Parse header
@@ -110,6 +111,7 @@ def format_stock_cards(html_content: str) -> str:
         # Find all <li>...</li> blocks
         li_items = re.findall(r'<li>(.*?)</li>', ul_content, re.DOTALL)
         
+        moat = ""
         roic = "N/A"
         de = "N/A"
         fcf = "N/A"
@@ -130,6 +132,10 @@ def format_stock_cards(html_content: str) -> str:
             if re.match(r'^\s*ROIC', li_text, re.IGNORECASE):
                 val_part = re.sub(r'^\s*ROIC\s*:?\s*', '', li_text, flags=re.IGNORECASE)
                 roic, _ = clean_val(val_part)
+            # Match Moat at start of line
+            elif re.match(r'^\s*Moat', li_text, re.IGNORECASE):
+                val_part = re.sub(r'^\s*Moat\s*:?\s*', '', li_text, flags=re.IGNORECASE)
+                moat = re.sub(r'<[^>]+>', '', val_part).strip()
             # Match Debt/Equity at start of line
             elif re.match(r'^\s*(?:Debt/Equity|Debt to Equity|D/E)', li_text, re.IGNORECASE):
                 val_part = re.sub(r'^\s*(?:Debt/Equity|Debt to Equity|D/E)\s*:?\s*', '', li_text, flags=re.IGNORECASE)
@@ -178,6 +184,15 @@ def format_stock_cards(html_content: str) -> str:
             bg_status = "#fffbeb"
             text_status = "#d97706"
             
+        moat_row = ""
+        if moat:
+            moat_row = f"""
+            <tr>
+              <td style="padding: 5px 0; border-bottom: 1px dashed #f1f5f9; color: #64748b; text-align: left;">Moat</td>
+              <td style="padding: 5px 0; border-bottom: 1px dashed #f1f5f9; text-align: right; font-weight: 700; color: #0f172a;">{moat}</td>
+            </tr>
+            """
+            
         comment_row = ""
         if comment:
             comment_row = f"""
@@ -200,6 +215,7 @@ def format_stock_cards(html_content: str) -> str:
           </div>
           
           <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem; line-height: 1.4;">
+            {moat_row}
             <tr>
               <td style="padding: 5px 0; border-bottom: 1px dashed #f1f5f9; color: #64748b; text-align: left;">ROIC</td>
               <td style="padding: 5px 0; border-bottom: 1px dashed #f1f5f9; text-align: right; font-weight: 700; color: #0f172a;">{roic}</td>
@@ -359,23 +375,25 @@ def send_email(subject: str, body: str):
         logger.error(f"Email network error: {e}")
         return False
 
+
+def run_daily_notification(report_dir: str) -> bool:
+    list_of_files = glob.glob(f"{report_dir}/*.md")
+    if not list_of_files:
+        logger.warning("No reports found to send.")
+        return False
+    latest_file = max(list_of_files, key=os.path.basename)
+    with open(latest_file, 'r') as f:
+        content = f.read()
+    logger.info(f"Sending latest report via email only: {os.path.basename(latest_file)}")
+    return send_email(f"Daily Report: {os.path.basename(latest_file)}", content)
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     from dotenv import load_dotenv
     load_dotenv()
-    
+
     # Find the most recent report
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     report_dir = os.path.join(base_dir, "knowledge_base", "daily_reports")
-    
-    # Get list of files
-    list_of_files = glob.glob(f"{report_dir}/*.md")
-    if not list_of_files:
-        logger.warning("No reports found to send.")
-    else:
-        latest_file = max(list_of_files, key=os.path.basename)
-        with open(latest_file, 'r') as f:
-            content = f.read()
-        logger.info(f"Sending latest report: {os.path.basename(latest_file)}")
-        send_telegram(content)
-        send_email(f"Daily Report: {os.path.basename(latest_file)}", content)
+    run_daily_notification(report_dir)

@@ -205,32 +205,32 @@ def format_stock_cards(html_content: str) -> str:
             
         return f"""
         <!-- STOCK_CARD_START -->
-        <div class="stock-card-item" style="background: #ffffff; border: 1px solid #e2e8f0; border-left: 5px solid {border_color}; border-radius: 8px; padding: 18px 22px; flex: 1 1 300px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <div class="stock-card-item" style="background: #ffffff; border: 1px solid #e2e8f0; border-left: 5px solid {border_color}; border-radius: 10px; padding: 18px 20px; margin-bottom: 16px; box-sizing: border-box; width: 100%; box-shadow: 0 2px 6px -1px rgba(0,0,0,0.06);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #f1f5f9;">
             <div>
-              <h3 style="margin: 0; font-size: 1.15rem; font-weight: 800; color: #0f172a; letter-spacing: -0.02em;">{ticker}</h3>
-              <span style="font-size: 0.75rem; color: #64748b; font-weight: 500;">{name}</span>
+              <h3 style="margin: 0; font-size: 1.2rem; font-weight: 800; color: #0f172a; letter-spacing: -0.02em;">{ticker}</h3>
+              <span style="font-size: 0.8rem; color: #64748b; font-weight: 500;">{name}</span>
             </div>
-            <span style="background: {bg_status}; color: {text_status}; padding: 4px 10px; border-radius: 100px; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase;">{status}</span>
+            <span style="background: {bg_status}; color: {text_status}; border: 1px solid {border_color}33; padding: 4px 12px; border-radius: 100px; font-size: 0.75rem; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase;">{status}</span>
           </div>
           
-          <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem; line-height: 1.4;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 0.88rem; line-height: 1.5;">
             {moat_row}
             <tr>
-              <td style="padding: 5px 0; border-bottom: 1px dashed #f1f5f9; color: #64748b; text-align: left;">ROIC</td>
-              <td style="padding: 5px 0; border-bottom: 1px dashed #f1f5f9; text-align: right; font-weight: 700; color: #0f172a;">{roic}</td>
+              <td style="padding: 6px 0; border-bottom: 1px dashed #f1f5f9; color: #64748b; text-align: left; width: 35%;">ROIC</td>
+              <td style="padding: 6px 0; border-bottom: 1px dashed #f1f5f9; text-align: right; font-weight: 700; color: #0f172a;">{roic}</td>
             </tr>
             <tr>
-              <td style="padding: 5px 0; border-bottom: 1px dashed #f1f5f9; color: #64748b; text-align: left;">Debt/Equity</td>
-              <td style="padding: 5px 0; border-bottom: 1px dashed #f1f5f9; text-align: right; font-weight: 700; color: #0f172a;">{de}</td>
+              <td style="padding: 6px 0; border-bottom: 1px dashed #f1f5f9; color: #64748b; text-align: left;">Debt/Equity</td>
+              <td style="padding: 6px 0; border-bottom: 1px dashed #f1f5f9; text-align: right; font-weight: 700; color: #0f172a;">{de}</td>
             </tr>
             <tr>
-              <td style="padding: 5px 0; border-bottom: 1px dashed #f1f5f9; color: #64748b; text-align: left;">FCF Yield</td>
-              <td style="padding: 5px 0; border-bottom: 1px dashed #f1f5f9; text-align: right; font-weight: 700; color: #0f172a;">{fcf}</td>
+              <td style="padding: 6px 0; border-bottom: 1px dashed #f1f5f9; color: #64748b; text-align: left;">FCF Yield</td>
+              <td style="padding: 6px 0; border-bottom: 1px dashed #f1f5f9; text-align: right; font-weight: 700; color: #0f172a;">{fcf}</td>
             </tr>
             <tr>
-              <td style="padding: 5px 0; color: #64748b; text-align: left;">Valuation</td>
-              <td style="padding: 5px 0; text-align: right; font-weight: 700; color: {border_color};">{val}</td>
+              <td style="padding: 6px 0; color: #64748b; text-align: left;">Valuation</td>
+              <td style="padding: 6px 0; text-align: right; font-weight: 700; color: {border_color};">{val}</td>
             </tr>
             {comment_row}
           </table>
@@ -240,8 +240,8 @@ def format_stock_cards(html_content: str) -> str:
     # Replace individual cards
     replaced_html = re.sub(pattern, replace_with_card, html_content, flags=re.DOTALL)
     
-    # Now group adjacent stock cards into a flex container
-    container_start = '<div style="display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 28px;">'
+    # Clean container: Stack vertically full-width with consistent margins
+    container_start = '<div style="margin: 20px 0 28px 0; width: 100%;">'
     container_end = '</div>'
     
     def wrap_group(match):
@@ -307,31 +307,82 @@ def build_html_body(subject: str, markdown_content: str) -> str:
 
     return f"""
     <!DOCTYPE html>
-    <html>
+    <html lang="en">
     <head>
       <meta charset="utf-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+      <meta name="x-apple-disable-message-reformatting">
+      <meta name="format-detection" content="telephone=no, date=no, address=no, email=no">
+      <style>
+        * {{ box-sizing: border-box; }}
+        body {{
+          margin: 0 !important;
+          padding: 0 !important;
+          width: 100% !important;
+          min-width: 100% !important;
+          background-color: #f1f5f9;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+          -webkit-text-size-adjust: 100%;
+          -ms-text-size-adjust: 100%;
+        }}
+        .email-outer-table {{
+          width: 100% !important;
+          border-collapse: collapse;
+          margin: 0 auto;
+          background-color: #f1f5f9;
+        }}
+        .email-container-cell {{
+          padding: 20px 10px;
+        }}
+        .email-card-wrapper {{
+          width: 100%;
+          max-width: 680px;
+          margin: 0 auto;
+          background-color: #ffffff;
+          border: 1px solid #e2e8f0;
+          border-radius: 12px;
+          overflow: hidden;
+          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08);
+        }}
+        .content-body {{
+          padding: 24px 20px;
+        }}
+        @media only screen and (max-width: 600px) {{
+          .email-container-cell {{ padding: 8px 4px !important; }}
+          .content-body {{ padding: 18px 14px !important; }}
+          .stock-card-item {{ padding: 14px 14px !important; }}
+          h1 {{ font-size: 1.4rem !important; }}
+          h2 {{ font-size: 1.15rem !important; margin-top: 28px !important; }}
+        }}
+      </style>
     </head>
     <body style="margin: 0; padding: 0; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
-      <div style="max-width: 650px; margin: 20px auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background: #ffffff; color: #334155; line-height: 1.6; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);">
-        
-        <!-- Header -->
-        <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 32px 24px; color: #ffffff; text-align: center; border-bottom: 4px solid #3b82f6;">
-          <h1 style="margin: 0; font-size: 1.75rem; font-weight: 800; letter-spacing: -0.025em; color: #ffffff;">📈 BUFFETT STRATEGIC ANALYST</h1>
-          <p style="margin: 6px 0 0 0; font-size: 0.875rem; color: #94a3b8; font-weight: 500;">DAILY FINANCIAL MARKET BRIEFING</p>
-        </div>
+      <table role="presentation" border="0" cellpadding="0" cellspacing="0" class="email-outer-table" width="100%">
+        <tr>
+          <td align="center" class="email-container-cell">
+            <div class="email-card-wrapper">
+              
+              <!-- Header -->
+              <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 32px 20px; color: #ffffff; text-align: center; border-bottom: 4px solid #3b82f6;">
+                <h1 style="margin: 0; font-size: 1.7rem; font-weight: 800; letter-spacing: -0.025em; color: #ffffff;">📈 BUFFETT STRATEGIC ANALYST</h1>
+                <p style="margin: 6px 0 0 0; font-size: 0.85rem; color: #94a3b8; font-weight: 500; letter-spacing: 0.05em;">DAILY FINANCIAL MARKET BRIEFING</p>
+              </div>
 
-        <div style="padding: 24px;">
-          {tldr_html}
-          {styled_html}
-        </div>
+              <!-- Content -->
+              <div class="content-body" style="padding: 28px 24px;">
+                {tldr_html}
+                {styled_html}
+              </div>
 
-        <!-- Footer -->
-        <div style="background: #f8fafc; padding: 20px; border-top: 1px solid #e2e8f0; text-align: center; font-size: 0.75rem; color: #94a3b8;">
-          <p style="margin: 0 0 4px 0;">This research is prepared using Warren Buffett & Charlie Munger's value investing principles.</p>
-          <p style="margin: 0;">Stock Tracker Automated Intelligence • Raspberry Pi Station</p>
-        </div>
-      </div>
+              <!-- Footer -->
+              <div style="background: #f8fafc; padding: 20px; border-top: 1px solid #e2e8f0; text-align: center; font-size: 0.75rem; color: #94a3b8; line-height: 1.5;">
+                <p style="margin: 0 0 4px 0;">This research is prepared using Warren Buffett & Charlie Munger's value investing principles.</p>
+                <p style="margin: 0;">Stock Tracker Automated Intelligence • Raspberry Pi Station</p>
+              </div>
+            </div>
+          </td>
+        </tr>
+      </table>
     </body>
     </html>
     """

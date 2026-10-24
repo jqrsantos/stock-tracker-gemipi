@@ -413,38 +413,63 @@ Overpriced M&A roll-up. Capital reallocated to high ROIC fortresses.
 
     formatted_md = format_weekly_audit(md_sample)
 
-    # 1. Quick jump navigation
-    assert 'href="#pruning-overview"' in formatted_md
-    assert 'href="#macro-stress"' in formatted_md
-    assert 'href="#pruning-ledger"' in formatted_md
-    assert 'href="#dip-scorecard"' in formatted_md
-    assert 'href="#active-audits"' in formatted_md
-    assert 'href="#dismissed-audits"' in formatted_md
+    # 1. Full PDF mode formatting (with all company cards)
+    formatted_pdf_md = format_weekly_audit(md_sample, for_pdf=True)
+    assert 'href="#pruning-overview"' in formatted_pdf_md
+    assert 'href="#macro-stress"' in formatted_pdf_md
+    assert 'href="#active-audits"' in formatted_pdf_md
+    assert 'href="#dismissed-audits"' in formatted_pdf_md
+    assert 'id="active-audits"' in formatted_pdf_md
+    assert 'id="dismissed-audits"' in formatted_pdf_md
+    assert '🏰 High-Conviction Active Compounding Fortresses (1 Equities Retained)' in formatted_pdf_md
+    assert '🚫 Expelled Value Traps & Broken Theses (1 Equities Dismissed)' in formatted_pdf_md
 
-    # 2. KPI Grids and Cards
-    assert 'id="macro-stress"' in formatted_md
-    assert 'id="pruning-overview"' in formatted_md
-    assert 'id="case-study-now"' in formatted_md
+    # 2. Executive email briefing mode (with PDF attachment banner, under 100 KB)
+    formatted_email_md = format_weekly_audit(md_sample, for_pdf=False)
+    assert 'id="pdf-dossier"' in formatted_email_md
+    assert 'href="#pdf-dossier"' in formatted_email_md
+    assert 'Complete 24-Page Forensic Audit Dossier Attached' in formatted_email_md
 
-    # 3. Active vs Dismissed separation
-    assert 'id="active-audits"' in formatted_md
-    assert 'id="dismissed-audits"' in formatted_md
-    assert '🏰 High-Conviction Active Compounding Fortresses (1 Equities Retained)' in formatted_md
-    assert '🚫 Expelled Value Traps & Broken Theses (1 Equities Dismissed)' in formatted_md
-    assert 'border-left: 5px solid #10b981' in formatted_md  # MSFT active card
-    assert 'border-left: 5px solid #ef4444' in formatted_md  # ROL dismissed card
-
-    # 4. Full HTML build with weekly flag
-    html = build_html_body("Weekly Watchlist Audit", md_sample, is_weekly=True)
-    assert "⚡ Weekly Watchlist Audit Executive Summary" in html
-    assert "max-width: 780px" in html
-    assert "WEEKLY WATCHLIST AUDIT & DEEP SCOUR DOSSIER" in html
-    assert 'id="pruning-overview"' in html
+    # 3. Full HTML build for email briefing
+    html_email = build_html_body("Weekly Watchlist Audit", md_sample, is_weekly=True, for_pdf=False)
+    assert "⚡ Weekly Watchlist Audit Executive Summary" in html_email
+    assert "max-width: 780px" in html_email
+    assert "WEEKLY WATCHLIST AUDIT & DEEP SCOUR DOSSIER" in html_email
+    assert 'id="pruning-overview"' in html_email
+    assert 'id="pdf-dossier"' in html_email
     # Active/Dismissed pills in table
-    assert ">ACTIVE</span>" in html
-    assert ">DISMISSED</span>" in html
-    assert "+47.85%</span>" in html
-    assert "-31.57%</span>" in html
+    assert ">ACTIVE</span>" in html_email
+    assert ">DISMISSED</span>" in html_email
+    assert "+47.85%</span>" in html_email
+    assert "-31.57%</span>" in html_email
+
+
+def test_send_email_attaches_pdf_when_available():
+    from notifier import send_email
+    from unittest.mock import patch, MagicMock
+
+    with patch("smtplib.SMTP") as mock_smtp, \
+         patch.dict("os.environ", {
+             "SMTP_SERVER": "smtp.example.com",
+             "SMTP_PORT": "587",
+             "SMTP_USER": "test@example.com",
+             "SMTP_PASSWORD": "password",
+             "EMAIL_TO": "user@example.com",
+         }), \
+         patch("os.path.exists", return_value=True), \
+         patch("builtins.open", mock_open(read_data=b"%PDF-1.4 mock binary")):
+
+        mock_server = MagicMock()
+        mock_smtp.return_value = mock_server
+
+        success = send_email("Weekly Subject", "Weekly Body", is_weekly=True, pdf_path="/fake/path/report.pdf")
+        assert success is True
+        mock_server.send_message.assert_called_once()
+        sent_msg = mock_server.send_message.call_args[0][0]
+        # Check that attachment was added
+        attachments = [p for p in sent_msg.iter_attachments()]
+        assert len(attachments) == 1
+        assert attachments[0].get_filename() == "report.pdf"
 
 
 

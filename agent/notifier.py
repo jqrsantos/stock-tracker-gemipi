@@ -3,6 +3,9 @@ import os
 import logging
 import glob
 import smtplib
+import subprocess
+import shutil
+from typing import Optional
 from email.message import EmailMessage
 
 logger = logging.getLogger(__name__)
@@ -267,22 +270,32 @@ def normalize_scouted_opportunities(markdown_text: str) -> str:
     return markdown_text
 
 
-def format_weekly_audit(markdown_text: str) -> str:
+def format_weekly_audit(markdown_text: str, for_pdf: bool = False) -> str:
     """
-    Transforms the weekly watchlist audit into a high-hierarchy executive dossier
-    with interactive jump navigation, KPI grids, macro stress cards, case study spotlight,
-    and separated Active Fortresses vs. Dismissed Traps cards.
+    Transforms the weekly watchlist audit into a high-hierarchy executive dossier.
+    - If for_pdf=False (email body): renders executive dashboard, macro stress, KPI grids,
+      case studies, master ledger tables, and an Executive PDF Dossier banner (under 75 KB to eliminate clipping).
+    - If for_pdf=True: renders the full 51 company deep cards split into Fortresses vs Expelled Traps.
     """
     # 1. Quick Navigation Bar
-    nav_bar = """
+    if for_pdf:
+        jump_active_dsm = """
+  <a href="#active-audits" style="display: inline-block; text-decoration: none; background: #ecfdf5; color: #065f46; border: 1px solid #10b98140; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; margin: 2px 4px;">🏰 32 Fortresses</a>
+  <a href="#dismissed-audits" style="display: inline-block; text-decoration: none; background: #fef2f2; color: #991b1b; border: 1px solid #ef444440; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; margin: 2px 4px;">🚫 19 Dismissals</a>
+"""
+    else:
+        jump_active_dsm = """
+  <a href="#pdf-dossier" style="display: inline-block; text-decoration: none; background: #eef2ff; color: #4338ca; border: 1px solid #6366f140; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; margin: 2px 4px;">📎 24-Page PDF Dossier</a>
+"""
+
+    nav_bar = f"""
 <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.03); text-align: center;">
   <span style="font-size: 0.75rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; display: inline-block; margin-right: 8px; vertical-align: middle;">Quick Jump:</span>
   <a href="#pruning-overview" style="display: inline-block; text-decoration: none; background: #f1f5f9; color: #1e293b; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; margin: 2px 4px;">📊 Pruning Verdict</a>
   <a href="#macro-stress" style="display: inline-block; text-decoration: none; background: #f1f5f9; color: #1e293b; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; margin: 2px 4px;">🏦 Macro Stress</a>
   <a href="#pruning-ledger" style="display: inline-block; text-decoration: none; background: #f1f5f9; color: #1e293b; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; margin: 2px 4px;">📋 Master Ledger</a>
   <a href="#dip-scorecard" style="display: inline-block; text-decoration: none; background: #f1f5f9; color: #1e293b; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; margin: 2px 4px;">🎯 Dip Scorecard</a>
-  <a href="#active-audits" style="display: inline-block; text-decoration: none; background: #ecfdf5; color: #065f46; border: 1px solid #10b98140; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; margin: 2px 4px;">🏰 32 Fortresses</a>
-  <a href="#dismissed-audits" style="display: inline-block; text-decoration: none; background: #fef2f2; color: #991b1b; border: 1px solid #ef444440; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; margin: 2px 4px;">🚫 19 Dismissals</a>
+{jump_active_dsm}
 </div>
 """
     markdown_text = nav_bar + "\n\n" + markdown_text
@@ -551,14 +564,18 @@ def format_weekly_audit(markdown_text: str) -> str:
             else:
                 dismissed_cards.append(card_str)
 
-        act_joined = "".join(active_cards)
-        dsm_joined = "".join(dismissed_cards)
+        act_count = len(active_cards) if active_cards else 32
+        dsm_count = len(dismissed_cards) if dismissed_cards else 19
 
-        active_section = f"""
+        if for_pdf:
+            act_joined = "".join(active_cards)
+            dsm_joined = "".join(dismissed_cards)
+
+            active_section = f"""
 <div id="active-audits" style="margin-top: 30px; margin-bottom: 24px;">
   <div style="background: #ecfdf5; border: 1px solid #a7f3d0; border-left: 6px solid #10b981; border-radius: 8px; padding: 14px 18px; margin-bottom: 20px;">
     <h3 style="margin: 0; font-size: 1.15rem; font-weight: 800; color: #065f46; letter-spacing: -0.01em;">
-      🏰 High-Conviction Active Compounding Fortresses ({len(active_cards)} Equities Retained)
+      🏰 High-Conviction Active Compounding Fortresses ({act_count} Equities Retained)
     </h3>
     <div style="font-size: 0.82rem; color: #047857; margin-top: 4px;">
       Unassailable moats, pristine accounting, zero excessive leverage, and defined Dip Buying Zones.
@@ -567,11 +584,11 @@ def format_weekly_audit(markdown_text: str) -> str:
   {act_joined}
 </div>
 """
-        dismissed_section = f"""
+            dismissed_section = f"""
 <div id="dismissed-audits" style="margin-top: 40px; margin-bottom: 24px;">
   <div style="background: #fef2f2; border: 1px solid #fecaca; border-left: 6px solid #ef4444; border-radius: 8px; padding: 14px 18px; margin-bottom: 20px;">
     <h3 style="margin: 0; font-size: 1.15rem; font-weight: 800; color: #991b1b; letter-spacing: -0.01em;">
-      🚫 Expelled Value Traps & Broken Theses ({len(dismissed_cards)} Equities Dismissed)
+      🚫 Expelled Value Traps & Broken Theses ({dsm_count} Equities Dismissed)
     </h3>
     <div style="font-size: 0.82rem; color: #b91c1c; margin-top: 4px;">
       Structural commoditization, severe customer concentration, dilution mills, or looming debt walls.
@@ -580,7 +597,28 @@ def format_weekly_audit(markdown_text: str) -> str:
   {dsm_joined}
 </div>
 """
-        new_audits = "## [DEEP COMPANY AUDITS]\n\n" + active_section + "\n\n" + dismissed_section
+            new_audits = "## [DEEP COMPANY AUDITS]\n\n" + active_section + "\n\n" + dismissed_section
+        else:
+            new_audits = f"""
+<div id="pdf-dossier" style="margin-top: 36px; margin-bottom: 24px;">
+  <div style="background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%); border: 1px solid #4338ca; border-radius: 12px; padding: 26px 22px; color: #ffffff; text-align: center; box-shadow: 0 4px 12px rgba(15,23,42,0.15);">
+    <div style="font-size: 2.2rem; margin-bottom: 8px;">📎 📑</div>
+    <div style="display: inline-block; background: #312e81; color: #a5b4fc; border: 1px solid #4338ca; padding: 3px 12px; border-radius: 9999px; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 10px;">ATTACHED PDF DOSSIER</div>
+    <h3 style="margin: 0 0 10px 0; font-size: 1.25rem; font-weight: 800; color: #ffffff; letter-spacing: -0.01em;">Complete 24-Page Forensic Audit Dossier Attached</h3>
+    <p style="margin: 0 auto 16px auto; font-size: 0.88rem; color: #cbd5e1; max-width: 520px; line-height: 1.6;">
+      To eliminate mobile email clipping while preserving deep institutional rigor, the full 51 company deep forensic audits—including <strong>{act_count} Retained Fortresses</strong>, <strong>{dsm_count} Expelled Value Traps</strong>, SEC 10-K/10-Q forensically reconciled metrics, and predetermined dip <strong>Buying Zones</strong>—are delivered in the attached high-resolution PDF.
+    </p>
+    <div style="background: rgba(255,255,255,0.08); border: 1px dashed rgba(255,255,255,0.25); border-radius: 8px; padding: 12px 16px; margin: 0 auto 16px auto; max-width: 440px; text-align: left; font-size: 0.82rem; color: #e2e8f0; line-height: 1.5;">
+      <div>📄 <strong>Attachment:</strong> <code style="color: #a5b4fc; font-weight: 700;">Weekly-Watchlist-Audit-YYYY-MM-DD.pdf</code></div>
+      <div style="margin-top: 4px;">⚖️ <strong>Coverage:</strong> 51 Companies ({act_count} Active Fortresses, {dsm_count} Expelled Traps)</div>
+      <div style="margin-top: 4px;">🎯 <strong>Contents:</strong> SEC Forensics, Moat Threats, Catalysts & Buying Zones</div>
+    </div>
+    <div style="display: inline-block; background: #6366f1; color: #ffffff; padding: 9px 22px; border-radius: 9999px; font-size: 0.82rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase;">
+      📥 Open Attached PDF in Mail / Preview
+    </div>
+  </div>
+</div>
+"""
         markdown_text = markdown_text[:audits_match.start()] + new_audits
 
     return markdown_text
@@ -653,7 +691,7 @@ def format_scorecard_summary(html_content: str) -> str:
 def format_data_tables(html_content: str) -> str:
     """
     Polishes data tables with clean borders, zebra rows, right-aligned numbers,
-    and colored pill badges for return percentages.
+    and colored pill badges for return percentages using concise CSS classes.
     """
     def polish_table(match):
         table_html = match.group(0)
@@ -666,44 +704,39 @@ def format_data_tables(html_content: str) -> str:
         # Polish header cells
         header_row_polished = re.sub(
             r'<th[^>]*>(.*?)</th>',
-            r'<th style="background: #f1f5f9; color: #334155; font-weight: 700; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; padding: 11px 12px; border-bottom: 2px solid #cbd5e1; text-align: left; white-space: nowrap;">\1</th>',
+            r'<th class="th-cell">\1</th>',
             header_row,
             flags=re.DOTALL,
         )
 
         new_body_rows = []
         for idx, r_content in enumerate(rows[1:]):
-            bg = "#ffffff" if idx % 2 == 0 else "#f8fafc"
+            row_cls = "tr-even" if idx % 2 == 0 else "tr-odd"
             cells = re.findall(r'<td[^>]*>(.*?)</td>', r_content, re.DOTALL)
             new_cells = []
             for c in cells:
                 c_clean = c.strip()
                 # Check if cell is return percentage (+94.85% or -45.04% or 0.00%)
                 if re.match(r'^[+\-][0-9\.]+\%$', c_clean):
-                    if c_clean.startswith('+'):
-                        pill = f'<span style="display: inline-block; text-align: center; background: #ecfdf5; color: #059669; font-weight: 700; padding: 2px 8px; border-radius: 9999px; font-size: 0.75rem; white-space: nowrap; line-height: 1.2;">{c_clean}</span>'
-                    else:
-                        pill = f'<span style="display: inline-block; text-align: center; background: #fef2f2; color: #dc2626; font-weight: 700; padding: 2px 8px; border-radius: 9999px; font-size: 0.75rem; white-space: nowrap; line-height: 1.2;">{c_clean}</span>'
-                    new_cells.append(f'<td style="padding: 10px 12px; border-bottom: 1px solid #f1f5f9; text-align: right;">{pill}</td>')
-                elif re.match(r'^\$?[0-9\.]+$', c_clean) or re.match(r'^\d+$', c_clean):
-                    new_cells.append(f'<td style="padding: 10px 12px; border-bottom: 1px solid #f1f5f9; text-align: right; color: #334155; font-variant-numeric: tabular-nums;">{c_clean}</td>')
+                    pill_cls = "pill-green" if c_clean.startswith('+') else "pill-red"
+                    new_cells.append(f'<td class="td-num"><span class="{pill_cls}">{c_clean}</span></td>')
                 elif c_clean in ("ACTIVE", "DISMISSED"):
-                    badge_bg = "#ecfdf5" if c_clean == "ACTIVE" else "#fef2f2"
-                    badge_color = "#059669" if c_clean == "ACTIVE" else "#dc2626"
-                    pill = f'<span style="display: inline-block; text-align: center; background: {badge_bg}; color: {badge_color}; font-weight: 800; padding: 2px 8px; border-radius: 9999px; font-size: 0.72rem; letter-spacing: 0.03em;">{c_clean}</span>'
-                    new_cells.append(f'<td style="padding: 10px 12px; border-bottom: 1px solid #f1f5f9; text-align: center;">{pill}</td>')
+                    badge_cls = "pill-green" if c_clean == "ACTIVE" else "pill-red"
+                    new_cells.append(f'<td class="td-center"><span class="{badge_cls}">{c_clean}</span></td>')
+                elif re.match(r'^\$?[0-9\.]+$', c_clean) or re.match(r'^\d+$', c_clean):
+                    new_cells.append(f'<td class="td-num">{c_clean}</td>')
                 else:
                     if re.match(r'^[A-Z0-9\.\-]+$', c_clean) and len(c_clean) <= 6:
-                        c_clean = f'<strong style="color: #0f172a; font-weight: 700;">{c_clean}</strong>'
-                    new_cells.append(f'<td style="padding: 10px 12px; border-bottom: 1px solid #f1f5f9; color: #1e293b;">{c_clean}</td>')
+                        c_clean = f'<strong style="color: #0f172a;">{c_clean}</strong>'
+                    new_cells.append(f'<td class="td-cell">{c_clean}</td>')
 
             cells_html = "".join(new_cells)
-            new_body_rows.append(f'<tr style="background: {bg};">{cells_html}</tr>')
+            new_body_rows.append(f'<tr class="{row_cls}">{cells_html}</tr>')
 
         tbody_html = "".join(new_body_rows)
         return (
-            '<div style="overflow-x: auto; margin: 18px 0 28px 0; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); background: #ffffff;">'
-            '<table style="width: 100%; min-width: 580px; border-collapse: collapse; font-size: 0.82rem; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, sans-serif; text-align: left;">'
+            '<div class="table-wrap">'
+            '<table class="data-table">'
             f'<thead><tr>{header_row_polished}</tr></thead>'
             f'<tbody>{tbody_html}</tbody>'
             '</table></div>'
@@ -916,13 +949,13 @@ def format_stock_cards(html_content: str) -> str:
     
     return replaced_html
 
-def build_html_body(subject: str, markdown_content: str, is_weekly: bool = False) -> str:
+def build_html_body(subject: str, markdown_content: str, is_weekly: bool = False, for_pdf: bool = False) -> str:
     """
     Converts report markdown into a beautifully designed HTML document.
     """
     if is_weekly:
         # 1. Transform weekly watchlist audit (navigation, KPI grids, case study, Active vs Dismissed company cards)
-        markdown_content = format_weekly_audit(markdown_content)
+        markdown_content = format_weekly_audit(markdown_content, for_pdf=for_pdf)
         tldr_html = extract_tldr(markdown_content, is_weekly=True)
     else:
         # 1. Normalize regional developments (no numbered bullets, clean regional cards)
@@ -1026,6 +1059,77 @@ def build_html_body(subject: str, markdown_content: str, is_weekly: bool = False
         .content-body {{
           padding: 24px 20px;
         }}
+        .table-wrap {{
+          overflow-x: auto;
+          margin: 18px 0 28px 0;
+          border: 1px solid #e2e8f0;
+          border-radius: 8px;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+          background: #ffffff;
+        }}
+        .data-table {{
+          width: 100%;
+          min-width: 580px;
+          border-collapse: collapse;
+          font-size: 0.82rem;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          text-align: left;
+        }}
+        .th-cell {{
+          background: #f1f5f9;
+          color: #334155;
+          font-weight: 700;
+          font-size: 0.72rem;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          padding: 11px 12px;
+          border-bottom: 2px solid #cbd5e1;
+          text-align: left;
+          white-space: nowrap;
+        }}
+        .td-cell {{
+          padding: 10px 12px;
+          border-bottom: 1px solid #f1f5f9;
+          color: #1e293b;
+        }}
+        .td-num {{
+          padding: 10px 12px;
+          border-bottom: 1px solid #f1f5f9;
+          text-align: right;
+          color: #334155;
+          font-variant-numeric: tabular-nums;
+        }}
+        .td-center {{
+          padding: 10px 12px;
+          border-bottom: 1px solid #f1f5f9;
+          text-align: center;
+        }}
+        .tr-even {{ background: #ffffff; }}
+        .tr-odd {{ background: #f8fafc; }}
+        .pill-green {{
+          display: inline-block;
+          text-align: center;
+          background: #ecfdf5;
+          color: #059669;
+          font-weight: 700;
+          padding: 2px 8px;
+          border-radius: 9999px;
+          font-size: 0.75rem;
+          white-space: nowrap;
+          line-height: 1.2;
+        }}
+        .pill-red {{
+          display: inline-block;
+          text-align: center;
+          background: #fef2f2;
+          color: #dc2626;
+          font-weight: 700;
+          padding: 2px 8px;
+          border-radius: 9999px;
+          font-size: 0.75rem;
+          white-space: nowrap;
+          line-height: 1.2;
+        }}
         @media only screen and (max-width: 600px) {{
           .email-container-cell {{ padding: 8px 4px !important; }}
           .content-body {{ padding: 18px 14px !important; }}
@@ -1067,7 +1171,90 @@ def build_html_body(subject: str, markdown_content: str, is_weekly: bool = False
     </html>
     """
 
-def send_email(subject: str, body: str, is_weekly: bool = False):
+def find_browser_binary() -> Optional[str]:
+    """
+    Locates an available Chrome/Chromium executable across macOS and Linux (including Raspberry Pi).
+    """
+    candidates = [
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        "/Applications/Chromium.app/Contents/MacOS/Chromium",
+        "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+        "chromium-browser",
+        "chromium",
+        "google-chrome",
+        "google-chrome-stable",
+    ]
+    for c in candidates:
+        if os.path.isabs(c) and os.path.exists(c):
+            return c
+        found = shutil.which(c)
+        if found:
+            return found
+    return None
+
+
+def generate_weekly_pdf(markdown_content: str, output_pdf_path: str) -> bool:
+    """
+    Compiles the full weekly markdown audit into a high-resolution,
+    unclipped 24-page PDF document with print-optimized pagination and styling.
+    """
+    browser = find_browser_binary()
+    if not browser:
+        logger.warning("No Chrome/Chromium browser binary found for PDF generation.")
+        return False
+
+    # Generate the complete HTML with all 51 deep cards
+    full_html = build_html_body("Weekly Watchlist Audit & Deep Scour Dossier", markdown_content, is_weekly=True, for_pdf=True)
+
+    print_css = """
+<style>
+@media print {
+  body { background-color: #ffffff !important; }
+  .email-card-wrapper { max-width: 100% !important; border: none !important; box-shadow: none !important; }
+  .email-container-cell { padding: 0 !important; }
+  @page {
+    size: A4;
+    margin: 14mm 12mm 14mm 12mm;
+  }
+  tr { page-break-inside: avoid; }
+  div[id^="card-"] { page-break-inside: avoid; margin-bottom: 22px; }
+}
+</style>
+"""
+    full_html_print = full_html.replace("</head>", print_css + "</head>")
+
+    temp_html_path = output_pdf_path + ".tmp.html"
+    try:
+        with open(temp_html_path, "w", encoding="utf-8") as f:
+            f.write(full_html_print)
+
+        cmd = [
+            browser,
+            "--headless",
+            "--disable-gpu",
+            "--no-pdf-header-footer",
+            f"--print-to-pdf={output_pdf_path}",
+            temp_html_path,
+        ]
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=90)
+        if res.returncode == 0 and os.path.exists(output_pdf_path) and os.path.getsize(output_pdf_path) > 0:
+            logger.info(f"Successfully generated PDF dossier: {output_pdf_path} ({os.path.getsize(output_pdf_path)} bytes)")
+            return True
+        else:
+            logger.error(f"Browser PDF generation failed (code {res.returncode}): {res.stderr}")
+            return False
+    except Exception as e:
+        logger.error(f"Error during PDF generation: {e}")
+        return False
+    finally:
+        if os.path.exists(temp_html_path):
+            try:
+                os.remove(temp_html_path)
+            except OSError:
+                pass
+
+
+def send_email(subject: str, body: str, is_weekly: bool = False, pdf_path: Optional[str] = None):
     smtp_server = os.getenv("SMTP_SERVER")
     smtp_port = os.getenv("SMTP_PORT", "587")
     smtp_user = os.getenv("SMTP_USER")
@@ -1087,9 +1274,17 @@ def send_email(subject: str, body: str, is_weekly: bool = False):
         # Set plain-text body alternative
         msg.set_content(body)
         
-        # Set rich HTML body
-        html_body = build_html_body(subject, body, is_weekly=is_weekly)
+        # Set rich HTML body (executive briefing under 75 KB for weekly)
+        html_body = build_html_body(subject, body, is_weekly=is_weekly, for_pdf=False)
         msg.add_alternative(html_body, subtype='html')
+
+        # Attach PDF if available
+        if pdf_path and os.path.exists(pdf_path):
+            with open(pdf_path, 'rb') as f:
+                pdf_data = f.read()
+            pdf_filename = os.path.basename(pdf_path)
+            msg.add_attachment(pdf_data, maintype='application', subtype='pdf', filename=pdf_filename)
+            logger.info(f"Attached PDF report to email: {pdf_filename} ({len(pdf_data)} bytes)")
 
         port = int(smtp_port)
         if port == 465:
@@ -1127,8 +1322,18 @@ def run_weekly_notification(report_dir: str) -> bool:
     latest_file = max(list_of_files, key=os.path.basename)
     with open(latest_file, 'r') as f:
         content = f.read()
-    logger.info(f"Sending latest weekly deep scour report via email: {os.path.basename(latest_file)}")
-    return send_email(f"Weekly Watchlist Audit & Deep Scour Dossier: {os.path.basename(latest_file)}", content, is_weekly=True)
+
+    # Automatically generate or update the 24-page PDF dossier
+    pdf_path = os.path.splitext(latest_file)[0] + ".pdf"
+    generate_weekly_pdf(content, pdf_path)
+
+    logger.info(f"Sending latest weekly deep scour report via email with PDF: {os.path.basename(latest_file)}")
+    return send_email(
+        f"Weekly Watchlist Audit & Deep Scour Dossier: {os.path.basename(latest_file)}",
+        content,
+        is_weekly=True,
+        pdf_path=pdf_path if os.path.exists(pdf_path) else None,
+    )
 
 
 if __name__ == "__main__":

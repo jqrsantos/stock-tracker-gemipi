@@ -98,12 +98,26 @@ async def execute_job_in_background(chat_id: str, bot, job_name: str, script_nam
                 text=(
                     f"✅ **{job_name} Completed!**\n\n"
                     f"⏱️ Duration: *{duration_mins:.1f} minutes*\n"
-                    f"📧 Full responsive report & dossier has been sent to your email.\n"
+                    f"📧 Executive briefing & attached PDF dossier delivered to your email.\n"
                     f"📊 Check /status or tap **📊 Watchlist & Status** to view updated metrics."
                 ),
                 reply_markup=MAIN_KEYBOARD,
                 parse_mode="Markdown",
             )
+            if job_name == "Weekly Deep Scour Swarm":
+                pdf_files = glob.glob(f"{PROJECT_ROOT}/knowledge_base/weekly_reports/*.pdf")
+                if pdf_files:
+                    latest_pdf = max(pdf_files, key=os.path.basename)
+                    try:
+                        with open(latest_pdf, "rb") as pdf_doc:
+                            await bot.send_document(
+                                chat_id=chat_id,
+                                document=pdf_doc,
+                                filename=os.path.basename(latest_pdf),
+                                caption="📑 Attached: Complete 24-Page Weekly Watchlist Audit & Scour PDF Dossier",
+                            )
+                    except Exception as e_pdf:
+                        logger.error(f"Failed to send PDF to Telegram: {e_pdf}")
         else:
             err_text = stderr.decode("utf-8", errors="replace").strip()
             err_tail = err_text[-400:] if err_text else "No stderr details provided."

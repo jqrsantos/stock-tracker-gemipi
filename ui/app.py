@@ -307,6 +307,17 @@ try:
                 if files:
                     selected_file = st.selectbox("Select Report Date", files)
                     if selected_file:
+                        pdf_candidate = os.path.splitext(selected_file)[0] + ".pdf"
+                        pdf_full_path = os.path.join(target_dir, pdf_candidate)
+                        if os.path.exists(pdf_full_path):
+                            with open(pdf_full_path, "rb") as pdf_file:
+                                st.download_button(
+                                    label=f"📥 Download Full 24-Page PDF Dossier ({pdf_candidate})",
+                                    data=pdf_file.read(),
+                                    file_name=pdf_candidate,
+                                    mime="application/pdf",
+                                    use_container_width=True,
+                                )
                         with open(os.path.join(target_dir, selected_file), "r") as f:
                             st.markdown(f.read())
                 else:

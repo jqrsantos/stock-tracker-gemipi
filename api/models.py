@@ -28,9 +28,12 @@ class Bargain(Base):
     currency = Column(String, nullable=False, default="USD")
     
     # Valuation intervals calculated dynamically by LLM
-    bargain_price = Column(Numeric(18, 8), nullable=False)  # Buy Limit
-    fair_price = Column(Numeric(18, 8), nullable=False)     # Intrinsic Value
-    expensive_price = Column(Numeric(18, 8), nullable=False) # Sell Limit
+    bargain_price = Column(Numeric(18, 8), nullable=False, default=0.0)  # Buy Limit
+    fair_price = Column(Numeric(18, 8), nullable=False, default=0.0)     # Intrinsic Value
+    expensive_price = Column(Numeric(18, 8), nullable=False, default=0.0) # Sell Limit
     
     rationale = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="ACTIVE")
+    dismissal_reason = Column(String, nullable=True)
+    deep_dossier = Column(String, nullable=True)
     timestamp = Column(DateTime, server_default=func.now())

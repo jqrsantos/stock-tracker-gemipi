@@ -162,3 +162,29 @@ def test_run_daily_notification_sends_email_only():
         run_daily_notification("/fake")
         mock_email.assert_called_once()
         mock_telegram.assert_not_called()
+
+
+def test_run_weekly_notification_sends_email_with_weekly_flag():
+    with patch("notifier.glob.glob", return_value=["/fake/2026-10-24-weekly-audit.md"]), \
+         patch("builtins.open", mock_open(read_data="# Weekly Report")), \
+         patch("notifier.send_email", return_value=True) as mock_email:
+        from notifier import run_weekly_notification
+        run_weekly_notification("/fake")
+        mock_email.assert_called_once()
+        args, kwargs = mock_email.call_args
+        assert "Weekly Watchlist Audit" in args[0]
+        assert kwargs.get("is_weekly") is True
+
+
+def test_build_html_body_weekly_badges_and_header():
+    md = """
+## [EXECUTIVE WATCHLIST PRUNING]
+- **NOW**: **ACTIVE** (High Conviction)
+- **INTC**: **DISMISSED** (Eroding foundry economics)
+    """
+    html = build_html_body("Weekly Audit", md, is_weekly=True)
+    assert "WEEKLY WATCHLIST AUDIT & DEEP SCOUR" in html
+    assert "ACTIVE" in html
+    assert "DISMISSED" in html
+    assert 'border: 1px solid #10b981;' in html
+    assert 'border: 1px solid #cbd5e1;' in html

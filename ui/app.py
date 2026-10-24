@@ -161,8 +161,8 @@ try:
                     if picks:
                         sc1, sc2, sc3, sc4 = st.columns(4)
                         sc1.metric("Total Scouted Stocks", summary.get("total_scouted", 0))
-                        sc2.metric("Win Rate", f"{summary.get('win_rate_pct', 0.0):.1f}%")
-                        sc3.metric("Avg Return (Since 1st Pick)", f"{summary.get('avg_return_pct', 0.0):+.2f}%")
+                        sc2.metric("Active / Dismissed", f"{summary.get('active_count', 0)} / {summary.get('dismissed_count', 0)}")
+                        sc3.metric("Avg Alert Return", f"{summary.get('avg_return_pct', 0.0):+.2f}%")
                         best = summary.get("best_pick")
                         if best:
                             sc4.metric("Best Scouted Pick", best["ticker"], f"{best['return_pct']:+.2f}%")
@@ -171,29 +171,56 @@ try:
 
                         scout_df = pd.DataFrame(picks)
                         scout_df["first_date"] = pd.to_datetime(scout_df["first_recommended_at"], format="ISO8601").dt.date
+                        if "status" not in scout_df.columns:
+                            scout_df["status"] = "ACTIVE"
+                        if "dismissal_reason" not in scout_df.columns:
+                            scout_df["dismissal_reason"] = ""
+                        if "deep_dossier" not in scout_df.columns:
+                            scout_df["deep_dossier"] = ""
+                        if "lowest_price_since_alert" not in scout_df.columns:
+                            scout_df["lowest_price_since_alert"] = scout_df["initial_price"]
+                        if "max_dip_discount_pct" not in scout_df.columns:
+                            scout_df["max_dip_discount_pct"] = 0.0
+                        if "peak_dip_return_pct" not in scout_df.columns:
+                            scout_df["peak_dip_return_pct"] = scout_df["return_pct"]
 
                         # Filter Controls
                         col_f1, col_f2 = st.columns([2, 2])
                         with col_f1:
                             filter_mode = st.radio(
-                                "Show recommendations:",
-                                ["All Recommendations", "High Conviction (Picked ≥ 5 times)", "Recent Dips (< 5 times)"],
-                                horizontal=True
+                                "Watchlist Filter:",
+                                [
+                                    "Active Conviction (High Moat)",
+                                    "All Recommendations",
+                                    "Dismissed Archive (Broken Thesis)",
+                                ],
+                                horizontal=True,
                             )
                         with col_f2:
                             sort_by = st.selectbox(
                                 "Sort by:",
-                                ["Highest Return (%)", "Most Frequently Picked", "Newest", "Oldest"]
+                                [
+                                    "Highest Alert Return (%)",
+                                    "Highest Peak Dip Return (%)",
+                                    "Deepest Max Dip (%)",
+                                    "Most Frequently Picked",
+                                    "Newest",
+                                    "Oldest",
+                                ],
                             )
 
                         filtered_df = scout_df.copy()
-                        if filter_mode == "High Conviction (Picked ≥ 5 times)":
-                            filtered_df = filtered_df[filtered_df["times_recommended"] >= 5]
-                        elif filter_mode == "Recent Dips (< 5 times)":
-                            filtered_df = filtered_df[filtered_df["times_recommended"] < 5]
+                        if filter_mode == "Active Conviction (High Moat)":
+                            filtered_df = filtered_df[filtered_df["status"] == "ACTIVE"]
+                        elif filter_mode == "Dismissed Archive (Broken Thesis)":
+                            filtered_df = filtered_df[filtered_df["status"] == "DISMISSED"]
 
-                        if sort_by == "Highest Return (%)":
+                        if sort_by == "Highest Alert Return (%)":
                             filtered_df = filtered_df.sort_values(by="return_pct", ascending=False)
+                        elif sort_by == "Highest Peak Dip Return (%)":
+                            filtered_df = filtered_df.sort_values(by="peak_dip_return_pct", ascending=False)
+                        elif sort_by == "Deepest Max Dip (%)":
+                            filtered_df = filtered_df.sort_values(by="max_dip_discount_pct", ascending=True)
                         elif sort_by == "Most Frequently Picked":
                             filtered_df = filtered_df.sort_values(by="times_recommended", ascending=False)
                         elif sort_by == "Newest":
@@ -210,13 +237,18 @@ try:
                                     "ticker",
                                     "name",
                                     "industry",
+                                    "status",
                                     "first_date",
                                     "days_tracked",
                                     "initial_price",
+                                    "lowest_price_since_alert",
                                     "current_price",
                                     "currency",
                                     "return_pct",
+                                    "max_dip_discount_pct",
+                                    "peak_dip_return_pct",
                                     "times_recommended",
+                                    "dismissal_reason",
                                     "rationale",
                                 ]],
                                 use_container_width=True,
@@ -224,17 +256,42 @@ try:
                                     "ticker": "Ticker",
                                     "name": "Company",
                                     "industry": "Industry",
+                                    "status": "Status",
                                     "first_date": st.column_config.DateColumn("First Recommended"),
                                     "days_tracked": st.column_config.NumberColumn("Days Tracked"),
-                                    "initial_price": st.column_config.NumberColumn("Initial Price", format="%.2f"),
+                                    "initial_price": st.column_config.NumberColumn("Alert Price", format="%.2f"),
+                                    "lowest_price_since_alert": st.column_config.NumberColumn("Lowest Dip", format="%.2f"),
                                     "current_price": st.column_config.NumberColumn("Current Price", format="%.2f"),
                                     "currency": "Currency",
-                                    "return_pct": st.column_config.NumberColumn("Return %", format="%+.2f%%"),
+                                    "return_pct": st.column_config.NumberColumn("Alert Return %", format="%+.2f%%"),
+                                    "max_dip_discount_pct": st.column_config.NumberColumn("Max Dip %", format="%+.2f%%"),
+                                    "peak_dip_return_pct": st.column_config.NumberColumn("Peak Dip Return %", format="%+.2f%%"),
                                     "times_recommended": st.column_config.NumberColumn("Times Picked"),
+                                    "dismissal_reason": "Dismissal Reason",
                                     "rationale": "Latest Moat & News Assessment",
                                 },
                                 hide_index=True,
                             )
+
+                            with st.expander("🔍 View Deep Audit Dossiers (Weekly Swarm Intelligence)"):
+                                stocks_with_dossier = filtered_df[
+                                    filtered_df["deep_dossier"].notna()
+                                    & (filtered_df["deep_dossier"].astype(str).str.strip() != "")
+                                    & (filtered_df["deep_dossier"].astype(str).str.strip() != "None")
+                                ]
+                                if not stocks_with_dossier.empty:
+                                    selected_ticker = st.selectbox(
+                                        "Select Stock Dossier:",
+                                        stocks_with_dossier["ticker"].tolist(),
+                                        format_func=lambda t: f"{t} - {stocks_with_dossier[stocks_with_dossier['ticker'] == t]['name'].values[0]} ({stocks_with_dossier[stocks_with_dossier['ticker'] == t]['status'].values[0]})",
+                                    )
+                                    if selected_ticker:
+                                        dossier_text = stocks_with_dossier[
+                                            stocks_with_dossier["ticker"] == selected_ticker
+                                        ]["deep_dossier"].values[0]
+                                        st.markdown(dossier_text)
+                                else:
+                                    st.info("No deep audit dossiers recorded yet. Run ./run_weekly_deep_scour.sh to generate weekly swarm audits.")
                     else:
                         st.info("No scouted stock recommendations recorded yet.")
                 else:
@@ -243,14 +300,19 @@ try:
                 st.error(f"Failed to fetch scouting performance: {e}")
 
         with tab4:
-            REPORTS_DIR = "knowledge_base/daily_reports"
-            if os.path.exists(REPORTS_DIR):
-                files = sorted([f for f in os.listdir(REPORTS_DIR) if f.endswith(".md")], reverse=True)
+            report_kind = st.radio("Report Category:", ["Daily Market Briefings", "Weekly Swarm Audits"], horizontal=True)
+            target_dir = "knowledge_base/daily_reports" if report_kind == "Daily Market Briefings" else "knowledge_base/weekly_reports"
+            if os.path.exists(target_dir):
+                files = sorted([f for f in os.listdir(target_dir) if f.endswith(".md")], reverse=True)
                 if files:
                     selected_file = st.selectbox("Select Report Date", files)
                     if selected_file:
-                        with open(os.path.join(REPORTS_DIR, selected_file), "r") as f:
+                        with open(os.path.join(target_dir, selected_file), "r") as f:
                             st.markdown(f.read())
+                else:
+                    st.info(f"No {report_kind.lower()} found yet.")
+            else:
+                st.info(f"Directory '{target_dir}' does not exist yet.")
 
 except Exception as e:
     st.error(f"Metrics fetch failed: {e}")

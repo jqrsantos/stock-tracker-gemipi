@@ -155,3 +155,52 @@ def test_compute_scouting_performance_preserves_first_day_price():
     assert adbe_pick["days_tracked"] == 61
 
 
+def test_compute_scouting_performance_with_dip_and_status():
+    class MockBargainRowWithStatus:
+        def __init__(self, ticker, name, industry, current_price, currency, rationale, timestamp, status="ACTIVE", dismissal_reason=None):
+            self.ticker = ticker
+            self.name = name
+            self.industry = industry
+            self.current_price = Decimal(str(current_price))
+            self.currency = currency
+            self.rationale = rationale
+            self.timestamp = timestamp
+            self.status = status
+            self.dismissal_reason = dismissal_reason
+            self.deep_dossier = None
+
+    t1 = datetime(2026, 5, 1, 10, 0, 0)
+    rows = [
+        # NOW: Alerted at 100, dipped to 80 (20% discount), now at 120
+        # Alert Return = +20%, Peak Dip Return = +50%
+        MockBargainRowWithStatus("NOW", "ServiceNow", "Software", 100.0, "USD", "Initial alert", t1, "ACTIVE"),
+        # INTC: Alerted at 30, dipped to 20, now at 22, DISMISSED
+        MockBargainRowWithStatus("INTC", "Intel Corp", "Semiconductors", 30.0, "USD", "Old dip", t1, "DISMISSED", "Foundry execution risks"),
+    ]
+
+    live_prices = {"NOW": 120.0, "INTC": 22.0}
+    lowest_prices = {"NOW": 80.0, "INTC": 20.0}
+
+    result = compute_scouting_performance(rows, live_prices, lowest_prices=lowest_prices, now=datetime(2026, 7, 1, 10, 0, 0))
+
+    assert result["summary"]["total_scouted"] == 2
+    assert result["summary"]["active_count"] == 1
+    assert result["summary"]["dismissed_count"] == 1
+
+    now_pick = next(p for p in result["picks"] if p["ticker"] == "NOW")
+    assert now_pick["status"] == "ACTIVE"
+    assert now_pick["initial_price"] == 100.0
+    assert now_pick["lowest_price_since_alert"] == 80.0
+    assert now_pick["current_price"] == 120.0
+    assert now_pick["return_pct"] == 20.0
+    assert now_pick["max_dip_discount_pct"] == -20.0
+    assert now_pick["peak_dip_return_pct"] == 50.0
+
+    intc_pick = next(p for p in result["picks"] if p["ticker"] == "INTC")
+    assert intc_pick["status"] == "DISMISSED"
+    assert intc_pick["dismissal_reason"] == "Foundry execution risks"
+    assert intc_pick["lowest_price_since_alert"] == 20.0
+    assert intc_pick["max_dip_discount_pct"] == -33.33
+    assert intc_pick["peak_dip_return_pct"] == 10.0
+
+

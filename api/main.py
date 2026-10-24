@@ -58,6 +58,14 @@ class BargainCreate(BaseModel):
     fair_price: Decimal = Decimal("0.0")
     expensive_price: Decimal = Decimal("0.0")
     rationale: str
+    status: str = "ACTIVE"
+    dismissal_reason: Optional[str] = None
+    deep_dossier: Optional[str] = None
+
+class BargainStatusUpdate(BaseModel):
+    status: str  # ACTIVE or DISMISSED
+    dismissal_reason: Optional[str] = None
+    deep_dossier: Optional[str] = None
 
 class BargainResponse(BaseModel):
     id: int
@@ -70,6 +78,9 @@ class BargainResponse(BaseModel):
     fair_price: Decimal
     expensive_price: Decimal
     rationale: str
+    status: str
+    dismissal_reason: Optional[str] = None
+    deep_dossier: Optional[str] = None
     timestamp: datetime
 
     class Config:
@@ -335,11 +346,34 @@ def get_bargains(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-def compute_scouting_performance(bargain_rows: list, live_prices: dict, now: Optional[datetime] = None) -> dict:
+@app.post("/bargains/{ticker}/status")
+def update_bargain_status(ticker: str, update: BargainStatusUpdate, db: Session = Depends(get_db)):
+    t_upper = ticker.strip().upper()
+    rows = db.query(models.Bargain).filter(models.Bargain.ticker == t_upper).all()
+    if not rows:
+        raise HTTPException(status_code=404, detail="Bargain ticker not found")
+    for r in rows:
+        r.status = update.status.upper()
+        if update.dismissal_reason is not None:
+            r.dismissal_reason = update.dismissal_reason
+        if update.deep_dossier is not None:
+            r.deep_dossier = update.deep_dossier
+    db.commit()
+    logger.info(f"Updated status for {t_upper} to {update.status.upper()} ({len(rows)} rows)")
+    return {"status": update.status.upper(), "ticker": t_upper, "updated_count": len(rows)}
+
+def compute_scouting_performance(
+    bargain_rows: list,
+    live_prices: dict,
+    lowest_prices: Optional[dict] = None,
+    now: Optional[datetime] = None
+) -> dict:
     if not bargain_rows:
         return {
             "summary": {
                 "total_scouted": 0,
+                "active_count": 0,
+                "dismissed_count": 0,
                 "win_rate_pct": 0.0,
                 "avg_return_pct": 0.0,
                 "best_pick": None,
@@ -355,6 +389,10 @@ def compute_scouting_performance(bargain_rows: list, live_prices: dict, now: Opt
     grouped = {}
     for row in sorted_rows:
         t = row.ticker.upper()
+        row_status = getattr(row, "status", None) or "ACTIVE"
+        row_dismissal = getattr(row, "dismissal_reason", None)
+        row_dossier = getattr(row, "deep_dossier", None)
+
         if t not in grouped:
             grouped[t] = {
                 "ticker": t,
@@ -366,11 +404,20 @@ def compute_scouting_performance(bargain_rows: list, live_prices: dict, now: Opt
                 "latest_recorded_price": float(row.current_price),
                 "rationale": row.rationale,
                 "times_recommended": 1,
+                "status": row_status,
+                "dismissal_reason": row_dismissal,
+                "deep_dossier": row_dossier,
             }
         else:
             grouped[t]["latest_recorded_price"] = float(row.current_price)
             grouped[t]["rationale"] = row.rationale
             grouped[t]["times_recommended"] += 1
+            if row_status:
+                grouped[t]["status"] = row_status
+            if row_dismissal is not None:
+                grouped[t]["dismissal_reason"] = row_dismissal
+            if row_dossier is not None:
+                grouped[t]["deep_dossier"] = row_dossier
 
     picks = []
     for t, info in grouped.items():
@@ -382,17 +429,33 @@ def compute_scouting_performance(bargain_rows: list, live_prices: dict, now: Opt
         ret_pct = ((live_p - initial_p) / initial_p * 100.0) if initial_p > 0 else 0.0
         days = max(0, (now_dt - info["first_recommended_at"]).days)
 
+        # Lowest price calculation since alert
+        lowest_p = None
+        if lowest_prices and t in lowest_prices and lowest_prices[t] > 0:
+            lowest_p = float(lowest_prices[t])
+        else:
+            lowest_p = min(initial_p, live_p)
+
+        max_dip_discount_pct = round(((lowest_p - initial_p) / initial_p * 100.0), 2) if initial_p > 0 else 0.0
+        peak_dip_return_pct = round(((live_p - lowest_p) / lowest_p * 100.0), 2) if lowest_p > 0 else 0.0
+
         picks.append(
             {
                 "ticker": t,
                 "name": info["name"],
                 "industry": info["industry"],
                 "currency": info["currency"],
+                "status": info["status"],
+                "dismissal_reason": info["dismissal_reason"],
+                "deep_dossier": info["deep_dossier"],
                 "first_recommended_at": info["first_recommended_at"].isoformat(),
                 "days_tracked": days,
                 "initial_price": round(initial_p, 2),
+                "lowest_price_since_alert": round(lowest_p, 2),
                 "current_price": round(float(live_p), 2),
                 "return_pct": round(ret_pct, 2),
+                "max_dip_discount_pct": max_dip_discount_pct,
+                "peak_dip_return_pct": peak_dip_return_pct,
                 "times_recommended": info["times_recommended"],
                 "rationale": info["rationale"],
             }
@@ -403,6 +466,8 @@ def compute_scouting_performance(bargain_rows: list, live_prices: dict, now: Opt
     wins = sum(1 for p in picks if p["return_pct"] > 0)
     win_rate = round((wins / total) * 100.0, 2) if total > 0 else 0.0
     avg_ret = round(sum(p["return_pct"] for p in picks) / total, 2) if total > 0 else 0.0
+    active_count = sum(1 for p in picks if p["status"] == "ACTIVE")
+    dismissed_count = sum(1 for p in picks if p["status"] == "DISMISSED")
 
     best_pick = {"ticker": picks[0]["ticker"], "return_pct": picks[0]["return_pct"]} if picks else None
     worst_pick = {"ticker": picks[-1]["ticker"], "return_pct": picks[-1]["return_pct"]} if picks else None
@@ -410,6 +475,8 @@ def compute_scouting_performance(bargain_rows: list, live_prices: dict, now: Opt
     return {
         "summary": {
             "total_scouted": total,
+            "active_count": active_count,
+            "dismissed_count": dismissed_count,
             "win_rate_pct": win_rate,
             "avg_return_pct": avg_ret,
             "best_pick": best_pick,
@@ -425,6 +492,15 @@ def get_bargains_performance(db: Session = Depends(get_db)):
         rows = db.query(models.Bargain).order_by(models.Bargain.timestamp.asc()).all()
         unique_tickers = sorted({r.ticker.upper() for r in rows})
         live_prices = {}
+        lowest_prices = {}
+        
+        # Determine earliest timestamp per ticker
+        earliest_dates = {}
+        for r in rows:
+            t = r.ticker.upper()
+            if t not in earliest_dates or (r.timestamp and r.timestamp < earliest_dates[t]):
+                earliest_dates[t] = r.timestamp
+
         for t in unique_tickers:
             try:
                 price, _ = fetch_stock_info(t)
@@ -433,7 +509,19 @@ def get_bargains_performance(db: Session = Depends(get_db)):
             except Exception as e:
                 logger.warning(f"Failed live price lookup for scouted stock {t}: {e}")
 
-        return compute_scouting_performance(rows, live_prices)
+            # Fetch lowest price since alert
+            try:
+                first_date = earliest_dates.get(t)
+                if first_date:
+                    start_str = first_date.strftime("%Y-%m-%d")
+                    yf_t = yf.Ticker(t)
+                    hist = yf_t.history(start=start_str)
+                    if not hist.empty and 'Low' in hist:
+                        lowest_prices[t] = float(hist['Low'].min())
+            except Exception as e:
+                logger.warning(f"Failed historical low lookup for {t}: {e}")
+
+        return compute_scouting_performance(rows, live_prices, lowest_prices=lowest_prices)
     except Exception as e:
         logger.error(f"Error computing scouting performance: {e}")
         raise HTTPException(status_code=500, detail=str(e))

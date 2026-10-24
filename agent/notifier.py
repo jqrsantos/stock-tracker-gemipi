@@ -259,7 +259,7 @@ def format_stock_cards(html_content: str) -> str:
     
     return replaced_html
 
-def build_html_body(subject: str, markdown_content: str) -> str:
+def build_html_body(subject: str, markdown_content: str, is_weekly: bool = False) -> str:
     """
     Converts report markdown into a beautifully designed HTML document.
     """
@@ -281,6 +281,8 @@ def build_html_body(subject: str, markdown_content: str) -> str:
     styled_html = styled_html.replace("<td>", '<td style="padding: 10px 12px; border-bottom: 1px solid #f1f5f9;">')
     
     # Bold and styling alerts
+    styled_html = styled_html.replace("<strong>ACTIVE</strong>", '<span style="background: #d1fae5; color: #065f46; border: 1px solid #10b981; padding: 2px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 800; white-space: nowrap;">ACTIVE</span>')
+    styled_html = styled_html.replace("<strong>DISMISSED</strong>", '<span style="background: #f1f5f9; color: #64748b; border: 1px solid #cbd5e1; padding: 2px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 800; white-space: nowrap;">DISMISSED</span>')
     styled_html = styled_html.replace("<strong>STRONG BUY</strong>", '<span style="background: #d1fae5; color: #065f46; padding: 2px 8px; border-radius: 12px; font-size: 0.72rem; font-weight: 800; white-space: nowrap;">STRONG BUY</span>')
     styled_html = styled_html.replace("<strong>STRONG HOLD</strong>", '<span style="background: #fef3c7; color: #92400e; padding: 2px 8px; border-radius: 12px; font-size: 0.72rem; font-weight: 800; white-space: nowrap;">STRONG HOLD</span>')
     styled_html = styled_html.replace("<strong>STRONG SELL</strong>", '<span style="background: #fee2e2; color: #991b1b; padding: 2px 8px; border-radius: 12px; font-size: 0.72rem; font-weight: 800; white-space: nowrap;">STRONG SELL</span>')
@@ -304,6 +306,8 @@ def build_html_body(subject: str, markdown_content: str) -> str:
     # Styled sections
     styled_html = re.sub(r'<h3>(.*?)</h3>', r'<h3 style="font-size: 1.15rem; font-weight: 700; color: #1e293b; margin-top: 24px; margin-bottom: 12px; text-align: left;">\1</h3>', styled_html)
     styled_html = re.sub(r'<h2>(.*?)</h2>', r'<h2 style="font-size: 1.35rem; font-weight: 800; color: #0f172a; margin-top: 40px; margin-bottom: 16px; border-bottom: 2px solid #e2e8f0; padding-bottom: 6px; text-transform: uppercase; text-align: left;">\1</h2>', styled_html)
+
+    subtitle = "WEEKLY WATCHLIST AUDIT & DEEP SCOUR" if is_weekly else "DAILY FINANCIAL MARKET BRIEFING"
 
     return f"""
     <!DOCTYPE html>
@@ -365,7 +369,7 @@ def build_html_body(subject: str, markdown_content: str) -> str:
               <!-- Header -->
               <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 32px 20px; color: #ffffff; text-align: center; border-bottom: 4px solid #3b82f6;">
                 <h1 style="margin: 0; font-size: 1.7rem; font-weight: 800; letter-spacing: -0.025em; color: #ffffff;">📈 BUFFETT STRATEGIC ANALYST</h1>
-                <p style="margin: 6px 0 0 0; font-size: 0.85rem; color: #94a3b8; font-weight: 500; letter-spacing: 0.05em;">DAILY FINANCIAL MARKET BRIEFING</p>
+                <p style="margin: 6px 0 0 0; font-size: 0.85rem; color: #94a3b8; font-weight: 500; letter-spacing: 0.05em;">{subtitle}</p>
               </div>
 
               <!-- Content -->
@@ -387,7 +391,7 @@ def build_html_body(subject: str, markdown_content: str) -> str:
     </html>
     """
 
-def send_email(subject: str, body: str):
+def send_email(subject: str, body: str, is_weekly: bool = False):
     smtp_server = os.getenv("SMTP_SERVER")
     smtp_port = os.getenv("SMTP_PORT", "587")
     smtp_user = os.getenv("SMTP_USER")
@@ -408,7 +412,7 @@ def send_email(subject: str, body: str):
         msg.set_content(body)
         
         # Set rich HTML body
-        html_body = build_html_body(subject, body)
+        html_body = build_html_body(subject, body, is_weekly=is_weekly)
         msg.add_alternative(html_body, subtype='html')
 
         port = int(smtp_port)
@@ -435,16 +439,32 @@ def run_daily_notification(report_dir: str) -> bool:
     latest_file = max(list_of_files, key=os.path.basename)
     with open(latest_file, 'r') as f:
         content = f.read()
-    logger.info(f"Sending latest report via email only: {os.path.basename(latest_file)}")
-    return send_email(f"Daily Report: {os.path.basename(latest_file)}", content)
+    logger.info(f"Sending latest daily report via email only: {os.path.basename(latest_file)}")
+    return send_email(f"Daily Report: {os.path.basename(latest_file)}", content, is_weekly=False)
+
+
+def run_weekly_notification(report_dir: str) -> bool:
+    list_of_files = glob.glob(f"{report_dir}/*.md")
+    if not list_of_files:
+        logger.warning("No weekly reports found to send.")
+        return False
+    latest_file = max(list_of_files, key=os.path.basename)
+    with open(latest_file, 'r') as f:
+        content = f.read()
+    logger.info(f"Sending latest weekly deep scour report via email: {os.path.basename(latest_file)}")
+    return send_email(f"Weekly Watchlist Audit & Deep Scour Dossier: {os.path.basename(latest_file)}", content, is_weekly=True)
 
 
 if __name__ == "__main__":
+    import sys
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     from dotenv import load_dotenv
     load_dotenv()
 
-    # Find the most recent report
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    report_dir = os.path.join(base_dir, "knowledge_base", "daily_reports")
-    run_daily_notification(report_dir)
+    if "--weekly" in sys.argv:
+        report_dir = os.path.join(base_dir, "knowledge_base", "weekly_reports")
+        run_weekly_notification(report_dir)
+    else:
+        report_dir = os.path.join(base_dir, "knowledge_base", "daily_reports")
+        run_daily_notification(report_dir)

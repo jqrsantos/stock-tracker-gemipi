@@ -172,36 +172,69 @@ try:
                         scout_df = pd.DataFrame(picks)
                         scout_df["first_date"] = pd.to_datetime(scout_df["first_recommended_at"], format="ISO8601").dt.date
 
-                        st.dataframe(
-                            scout_df[[
-                                "ticker",
-                                "name",
-                                "industry",
-                                "first_date",
-                                "days_tracked",
-                                "initial_price",
-                                "current_price",
-                                "currency",
-                                "return_pct",
-                                "times_recommended",
-                                "rationale",
-                            ]],
-                            use_container_width=True,
-                            column_config={
-                                "ticker": "Ticker",
-                                "name": "Company",
-                                "industry": "Industry",
-                                "first_date": st.column_config.DateColumn("First Recommended"),
-                                "days_tracked": st.column_config.NumberColumn("Days Tracked"),
-                                "initial_price": st.column_config.NumberColumn("Initial Price", format="%.2f"),
-                                "current_price": st.column_config.NumberColumn("Current Price", format="%.2f"),
-                                "currency": "Currency",
-                                "return_pct": st.column_config.NumberColumn("Return %", format="%+.2f%%"),
-                                "times_recommended": st.column_config.NumberColumn("Times Picked"),
-                                "rationale": "Latest Moat & News Assessment",
-                            },
-                            hide_index=True,
-                        )
+                        # Filter Controls
+                        col_f1, col_f2 = st.columns([2, 2])
+                        with col_f1:
+                            filter_mode = st.radio(
+                                "Show recommendations:",
+                                ["All Recommendations", "High Conviction (Picked ≥ 5 times)", "Recent Dips (< 5 times)"],
+                                horizontal=True
+                            )
+                        with col_f2:
+                            sort_by = st.selectbox(
+                                "Sort by:",
+                                ["Highest Return (%)", "Most Frequently Picked", "Newest", "Oldest"]
+                            )
+
+                        filtered_df = scout_df.copy()
+                        if filter_mode == "High Conviction (Picked ≥ 5 times)":
+                            filtered_df = filtered_df[filtered_df["times_recommended"] >= 5]
+                        elif filter_mode == "Recent Dips (< 5 times)":
+                            filtered_df = filtered_df[filtered_df["times_recommended"] < 5]
+
+                        if sort_by == "Highest Return (%)":
+                            filtered_df = filtered_df.sort_values(by="return_pct", ascending=False)
+                        elif sort_by == "Most Frequently Picked":
+                            filtered_df = filtered_df.sort_values(by="times_recommended", ascending=False)
+                        elif sort_by == "Newest":
+                            filtered_df = filtered_df.sort_values(by="first_recommended_at", ascending=False)
+                        elif sort_by == "Oldest":
+                            filtered_df = filtered_df.sort_values(by="first_recommended_at", ascending=True)
+
+                        if filtered_df.empty:
+                            st.info(f"No stocks found matching '{filter_mode}'.")
+                        else:
+                            st.caption(f"Showing {len(filtered_df)} of {len(scout_df)} scouted companies")
+                            st.dataframe(
+                                filtered_df[[
+                                    "ticker",
+                                    "name",
+                                    "industry",
+                                    "first_date",
+                                    "days_tracked",
+                                    "initial_price",
+                                    "current_price",
+                                    "currency",
+                                    "return_pct",
+                                    "times_recommended",
+                                    "rationale",
+                                ]],
+                                use_container_width=True,
+                                column_config={
+                                    "ticker": "Ticker",
+                                    "name": "Company",
+                                    "industry": "Industry",
+                                    "first_date": st.column_config.DateColumn("First Recommended"),
+                                    "days_tracked": st.column_config.NumberColumn("Days Tracked"),
+                                    "initial_price": st.column_config.NumberColumn("Initial Price", format="%.2f"),
+                                    "current_price": st.column_config.NumberColumn("Current Price", format="%.2f"),
+                                    "currency": "Currency",
+                                    "return_pct": st.column_config.NumberColumn("Return %", format="%+.2f%%"),
+                                    "times_recommended": st.column_config.NumberColumn("Times Picked"),
+                                    "rationale": "Latest Moat & News Assessment",
+                                },
+                                hide_index=True,
+                            )
                     else:
                         st.info("No scouted stock recommendations recorded yet.")
                 else:

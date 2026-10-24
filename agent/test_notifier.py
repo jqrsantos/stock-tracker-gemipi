@@ -188,3 +188,100 @@ def test_build_html_body_weekly_badges_and_header():
     assert "DISMISSED" in html
     assert 'border: 1px solid #10b981;' in html
     assert 'border: 1px solid #cbd5e1;' in html
+
+
+def test_format_stock_cards_does_not_swallow_macro_header():
+    html_input = """
+<h3>Regional Developments Across Major Economies</h3>
+<p>1. United States (US):<br>2. Monetary Policy & Inflation: Benchmark 10 year U.S. Treasury yields hover near multi</p>
+<h3>ADBE (Adobe Inc.) - BUY</h3>
+<ul>
+<li>Moat: Wide (Creative Cloud and Document Cloud standard formats, massive switching costs)</li>
+<li>ROIC: 27.5% (Op Margin: 34.8%)</li>
+<li>Debt/Equity: 0.57</li>
+<li>FCF Yield: 9.6% (Growing)</li>
+<li>Valuation: P/E 14.7x (5Y Avg: N/A | Fwd: 9.6x)</li>
+<li>Note: Adobe continues converting its digital creation monopoly into massive free cash flows.</li>
+</ul>
+    """
+    formatted = format_stock_cards(html_input)
+    # Ensure Regional Developments remains outside the stock card
+    assert "Regional Developments Across Major Economies</h3>" in formatted
+    # Ensure Adobe is cleanly isolated as its own card
+    assert "ADBE</h3>" in formatted
+    assert "Adobe Inc." in formatted
+    assert "BUY" in formatted
+    assert "27.5%" in formatted
+    # Check that badge has centered styles
+    assert "text-align: center" in formatted
+    assert "display: inline-block" in formatted
+
+
+def test_normalize_scouted_opportunities_removes_dense_numbered_bullets():
+    from notifier import normalize_scouted_opportunities
+    md_input = """
+## [SCOUTED OPPORTUNITIES]
+
+Today's top 3 scouted high-quality peaceful opportunities selected for strong moats:
+
+1. ZTS (Zoetis Inc.) - BUY
+2. Sector / Industry: Healthcare / Drug Manufacturers
+3. Current Price: $81.03 USD (52W Range: $68.77 - $147.93)
+4. Moat: Wide (Patented veterinary medications)
+5. Financial Health: ROIC 22.1% (5Y Median), Operating Margin 40.7%, Debt/Equity 2.77, FCF Yield 6.82% (Growing)
+6. Valuation: Trailing P/E 13.33x | Forward P/E 12.38x
+7. Recent News & Catalysts: Supported by defensive healthcare sector rotation.
+
+8. MSFT (Microsoft Corporation) - BUY
+9. Sector / Industry: Technology / Software
+10. Current Price: $524.51 USD
+11. Moat: Wide (Dominant Office 365)
+12. Financial Health: ROIC 27.1%, Debt/Equity 0.13, FCF Yield 1.72% (Growing)
+13. Valuation: Trailing P/E 29.22x
+14. Recent News & Catalysts: Microsoft announced enterprise rollout.
+    """
+    normalized = normalize_scouted_opportunities(md_input)
+    assert "### ZTS (Zoetis Inc.) - BUY" in normalized
+    assert "### MSFT (Microsoft Corporation) - BUY" in normalized
+    assert "Wide (Patented veterinary medications)" in normalized
+    assert "ROIC: 22.1%" in normalized
+    assert "Debt/Equity: 2.77" in normalized
+    assert "Trailing P/E 13.33x" in normalized
+    assert "Supported by defensive healthcare sector rotation." in normalized
+    # Numbered list entries should be gone from the card markdown
+    assert "1. ZTS" not in normalized
+    assert "8. MSFT" not in normalized
+
+
+def test_scorecard_summary_and_table_polishing():
+    md_input = """
+## [SCOUTING PERFORMANCE]
+
+Scorecard Summary
+- Total Scouted Picks: 51
+- Overall Win Rate: 64.71% (33 positive / 1 neutral / 17 negative)
+- Average Return Since Day-1: +10.64%
+- Top Performer: ACN (+94.85%)
+- Lagging Performer: ADBE (-45.04%)
+
+| Ticker | Company Name | Initial Price | Current Price | Return % | Days Tracked | Times Recommended |
+|---|---|---|---|---|---|---|
+| ACN | Accenture plc | $127.98 | $249.37 | +94.85% | 127 | 73 |
+| ADBE | Adobe Inc. | $480.00 | $263.82 | -45.04% | 152 | 102 |
+    """
+    html = build_html_body("Daily Report", md_input)
+    # Check Scorecard KPI Grid is present without bullet list
+    assert "Total Scouted" in html
+    assert "51" in html
+    assert "64.71%" in html
+    assert "+10.64%" in html
+    assert "ACN" in html
+    assert "<li>Total Scouted Picks: 51</li>" not in html
+    # Check Table styling has pills
+    assert "+94.85%</span>" in html
+    assert "-45.04%</span>" in html
+    assert "#ecfdf5" in html  # Green return pill
+    assert "#fef2f2" in html  # Red return pill
+    # Check centered indication badge styles
+    assert "text-align: center" in html
+

@@ -1,8 +1,8 @@
 FROM ghcr.io/astral-sh/uv:latest AS uv
 FROM python:3.11-slim
 
-# Install curl and Antigravity CLI (agy)
-RUN apt-get update && apt-get install -y curl && \
+# Install curl, jq and Antigravity CLI (agy)
+RUN apt-get update && apt-get install -y curl jq && \
     curl -fsSL https://antigravity.google/cli/install.sh | bash && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 

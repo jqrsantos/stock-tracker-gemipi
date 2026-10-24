@@ -49,6 +49,8 @@ services:
     volumes:
       - ./knowledge_base:/app/knowledge_base
       - ./agent:/app/agent
+      - ./run_daily_research.sh:/app/run_daily_research.sh
+      - ./run_weekly_deep_scour.sh:/app/run_weekly_deep_scour.sh
       - ~/.gemini:/root/.gemini
     depends_on:
       api:

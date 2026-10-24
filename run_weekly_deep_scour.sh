@@ -12,13 +12,14 @@ export PATH="$USER_HOME/.local/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"
 
 CURL_BIN=$(command -v curl || echo "/usr/bin/curl")
 JQ_BIN=$(command -v jq || echo "/usr/bin/jq")
+API_BASE="${API_URL:-http://localhost:8000}"
 
 echo "========================================================"
 echo " 🚀 INITIATING WEEKLY DEEP SCOUR SWARM & WATCHLIST AUDIT"
 echo "========================================================"
 
 # Fetch current unique scouted tickers from the API
-if BARGAINS_JSON=$("$CURL_BIN" -s -f http://localhost:8000/bargains/ 2>/dev/null); then
+if BARGAINS_JSON=$("$CURL_BIN" -s -f "$API_BASE/bargains/" 2>/dev/null); then
   SCOUTED_TICKERS=$(echo "$BARGAINS_JSON" | "$JQ_BIN" -r '.[].ticker' 2>/dev/null | sort -u | paste -sd, -)
 else
   SCOUTED_TICKERS=""
@@ -39,7 +40,7 @@ mkdir -p knowledge_base/weekly_reports
 PROMPT="You are the Lead Forensic Investment Auditor using the 'deep_scour_swarm' skill (agent/skills/deep_scour_swarm/SKILL.md).
 Operate with MAXIMUM REASONING EFFORT (Gemini Argon). Conduct a comprehensive weekly research audit on the following tracked candidate stocks: ($SCOUTED_TICKERS).
 
-1. Retrieve candidate data from 'GET http://localhost:8000/bargains/' and portfolio positions from 'GET http://localhost:8000/portfolio/holdings'.
+1. Retrieve candidate data from 'GET $API_BASE/bargains/' and portfolio positions from 'GET $API_BASE/portfolio/holdings'.
 2. For each tracked stock, dispatch a parallel 3-agent investigative swarm:
    - 'sec_filings_investigator': 10-K/10-Q accounting forensics, organic revenue vs acquisitions, SBC as % of revenue, debt maturity schedule, CapEx vs Depreciation.
    - 'moat_threat_analyst': Moat verification, pricing power proof, 5-year competitive counter-thesis & disruption vectors, customer churn.
@@ -48,9 +49,9 @@ Operate with MAXIMUM REASONING EFFORT (Gemini Argon). Conduct a comprehensive we
    - 'ACTIVE' (High Conviction, durable moat, clean accounting): Establish an optimal Buying Zone / Dip Target.
    - 'DISMISSED' (Broken thesis, structural disruption, excessive leverage, or deceptive accounting): Formulate an explicit, punchy dismissal reason.
 4. For every audited stock, update its status in the database:
-   POST http://localhost:8000/bargains/{ticker}/status
+   POST $API_BASE/bargains/{ticker}/status
    Payload: {\"status\": \"ACTIVE\" or \"DISMISSED\", \"dismissal_reason\": \"...\", \"deep_dossier\": \"...\"}
-5. Query 'GET http://localhost:8000/bargains/performance' to analyze post-alert price action and dip opportunities (highlighting cases like NOW where waiting for post-alert weakness produced peak returns).
+5. Query 'GET $API_BASE/bargains/performance' to analyze post-alert price action and dip opportunities (highlighting cases like NOW where waiting for post-alert weakness produced peak returns).
 6. Compile the complete dossier into 'knowledge_base/weekly_reports/\$(date +%F)-weekly-audit.md' with:
    - ## [EXECUTIVE WATCHLIST PRUNING]
    - ## [DIP OPPORTUNITY SCORECARD]

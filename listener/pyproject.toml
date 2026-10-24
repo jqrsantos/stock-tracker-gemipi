@@ -8,5 +8,6 @@ dependencies = [
     "python-telegram-bot",
     "requests",
     "python-dotenv",
+    "markdown",
     "yfinance",
 ]

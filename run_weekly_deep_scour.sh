@@ -65,7 +65,12 @@ if ! "$AGY_BIN" --print-timeout 45m --prompt "$PROMPT" --dangerously-skip-permis
 fi
 
 echo "Weekly research complete. Triggering dedicated weekly email dossier..."
-if ! "$SCRIPT_DIR/.venv/bin/python" "$SCRIPT_DIR/agent/notifier.py" --weekly; then
+PYTHON_BIN="$SCRIPT_DIR/.venv/bin/python"
+if [ ! -f "$PYTHON_BIN" ]; then
+  PYTHON_BIN=$(command -v python3)
+fi
+
+if ! "$PYTHON_BIN" "$SCRIPT_DIR/agent/notifier.py" --weekly; then
   echo "Error: Weekly notification script failed." >&2
   exit 1
 fi

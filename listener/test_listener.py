@@ -72,11 +72,22 @@ class TestTelegramListener(unittest.IsolatedAsyncioTestCase):
         mock_context = MagicMock()
         mock_context.bot = MagicMock()
 
-        with patch.object(listener_main, "execute_job_in_background", new_callable=AsyncMock) as mock_exec, \
+        async def dummy_job(*args, **kwargs):
+            pass
+
+        with patch.object(listener_main, "execute_job_in_background", side_effect=dummy_job) as mock_exec, \
              patch("asyncio.create_task") as mock_create_task:
+            def fake_create_task(coro):
+                coro.close()
+                return MagicMock()
+            mock_create_task.side_effect = fake_create_task
+
             await listener_main.handle_daily(mock_update, mock_context)
             self.assertIsNotNone(listener_main.current_job)
             self.assertEqual(listener_main.current_job["name"], "Daily Market Briefing")
+            mock_exec.assert_called_once_with(
+                "12345678", mock_context.bot, "Daily Market Briefing", "run_daily_research.sh"
+            )
             mock_create_task.assert_called_once()
 
     async def test_handle_status_formatting(self):
@@ -148,6 +159,29 @@ class TestTelegramListener(unittest.IsolatedAsyncioTestCase):
             mock_update.message.text = "NOW"
             await listener_main.handle_text_message(mock_update, mock_context)
             mock_eval.assert_called_once()
+
+    def test_listener_dependencies_include_markdown(self):
+        try:
+            import tomllib
+        except ImportError:
+            import tomli as tomllib
+
+        pyproject_path = Path(__file__).resolve().parent / "pyproject.toml"
+        with open(pyproject_path, "rb") as f:
+            data = tomllib.load(f)
+
+        dependencies = data.get("project", {}).get("dependencies", [])
+        self.assertIn("markdown", dependencies, "listener must declare markdown so Docker container installs it")
+
+    def test_research_scripts_have_python_bin_fallback(self):
+        root_dir = Path(__file__).resolve().parent.parent
+        daily_script = (root_dir / "run_daily_research.sh").read_text()
+        weekly_script = (root_dir / "run_weekly_deep_scour.sh").read_text()
+
+        for script, name in [(daily_script, "run_daily_research.sh"), (weekly_script, "run_weekly_deep_scour.sh")]:
+            self.assertIn('PYTHON_BIN="$SCRIPT_DIR/.venv/bin/python"', script, f"{name} must resolve virtualenv python")
+            self.assertIn('PYTHON_BIN=$(command -v python3)', script, f"{name} must fallback to python3 if venv missing")
+            self.assertIn('"$PYTHON_BIN" "$SCRIPT_DIR/agent/notifier.py"', script, f"{name} must invoke notifier via $PYTHON_BIN")
 
 
 if __name__ == "__main__":

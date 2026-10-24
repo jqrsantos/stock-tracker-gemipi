@@ -184,6 +184,7 @@ def test_build_html_body_weekly_badges_and_header():
     """
     html = build_html_body("Weekly Audit", md, is_weekly=True)
     assert "WEEKLY WATCHLIST AUDIT & DEEP SCOUR" in html
+    assert "Weekly Watchlist Audit Executive Summary" in html
     assert "ACTIVE" in html
     assert "DISMISSED" in html
     assert 'border: 1px solid #10b981;' in html

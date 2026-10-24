@@ -285,3 +285,55 @@ Scorecard Summary
     # Check centered indication badge styles
     assert "text-align: center" in html
 
+
+def test_format_regional_developments_removes_numbers_and_creates_cards():
+    from notifier import format_regional_developments
+    md_input = """
+### Regional Developments Across Major Economies
+
+1. **United States (US)**:
+   - **Monetary Policy & Inflation**: Benchmark 10-year Treasury yields hover near 5.15%.
+   - **Economic Activity**: GDP tracking near 4.0% annualized.
+
+2. **European Union (EU)**:
+   - **Inflation & Sovereign Pressures**: Eurozone growth near 1.1% for 2026.
+   - **Trade Safeguards**: Strict Made in Europe rules planned.
+
+3. **China**:
+   - **Growth Resilience**: GDP growth surprise of 4.5% YoY.
+
+4. **Japan**:
+   - **Policy Normalization**: BOJ rate at 1.25%.
+    """
+    formatted = format_regional_developments(md_input)
+    # Ensure numbered list markers are completely removed
+    assert "1. **United States" not in formatted
+    assert "2. **European Union" not in formatted
+    assert "3. **China" not in formatted
+    assert "4. **Japan" not in formatted
+    # Check that regional cards with flags and colored borders exist
+    assert "🇺🇸 United States (US)" in formatted
+    assert "🇪🇺 European Union (EU)" in formatted
+    assert "🇨🇳 China" in formatted
+    assert "🇯🇵 Japan" in formatted
+    assert "border-left: 5px solid #3b82f6" in formatted  # US card
+    assert "Monetary Policy & Inflation:" in formatted
+    assert "Benchmark 10-year Treasury yields hover near 5.15%." in formatted
+
+    # Test with level-4 heading markdown syntax as well
+    md_heading_input = """
+### Regional Developments Across Major Economies
+
+#### 🇺🇸 United States (US)
+- **Monetary Policy & Inflation**: Benchmark yields near 5.15%.
+
+#### 🇪🇺 European Union (EU)
+- **Inflation & Sovereign Pressures**: Eurozone growth near 1.1%.
+    """
+    formatted_headings = format_regional_developments(md_heading_input)
+    assert "🇺🇸 United States (US)" in formatted_headings
+    assert "🇪🇺 European Union (EU)" in formatted_headings
+    assert "border-left: 5px solid #3b82f6" in formatted_headings
+    assert "Monetary Policy & Inflation:" in formatted_headings
+
+

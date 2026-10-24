@@ -74,6 +74,95 @@ def extract_tldr(markdown_text: str) -> str:
     """
 
 
+def format_regional_developments(markdown_text: str) -> str:
+    """
+    Transforms dense/dyslexic-unfriendly numbered lists in
+    'Regional Developments Across Major Economies' into clean, dyslexia-friendly
+    regional cards with country flags and colored borders, eliminating numbered bullets.
+    """
+    pattern = r'(###\s*Regional Developments Across Major Economies\s*\n+)(.*?)(?=\n\s*###|\n\s*##|\Z)'
+    match = re.search(pattern, markdown_text, re.DOTALL | re.IGNORECASE)
+    if not match:
+        return markdown_text
+
+    body = match.group(2)
+
+    region_name_pattern = r'(?:United States \(US\)|United States|US|European Union \(EU\)|European Union|EU|China|Japan)'
+    region_prefix = r'(?:^|\n)\s*(?:####\s+)?(?:\d+\.\s+)?(?:[^\w\s]+\s+)?(?:\*\*)?'
+    region_regex = region_prefix + r'(' + region_name_pattern + r')(?:\*\*)?\s*:?'
+    split_regex = r'(?=(?:^|\n)\s*(?:####\s+)?(?:\d+\.\s+)?(?:[^\w\s]+\s+)?(?:\*\*)?' + region_name_pattern + r'(?:\*\*)?\s*:?)'
+
+    splits = re.split(split_regex, body)
+
+    flag_map = {
+        'United States (US)': ('🇺🇸', '#3b82f6'),
+        'European Union (EU)': ('🇪🇺', '#6366f1'),
+        'China': ('🇨🇳', '#f59e0b'),
+        'Japan': ('🇯🇵', '#0d9488'),
+    }
+
+    cards = []
+    intro_lines = []
+
+    for block in splits:
+        m = re.search(region_regex, block)
+        if not m:
+            if block.strip():
+                intro_lines.append(block.strip())
+            continue
+        raw_name = m.group(1).strip()
+        if 'United States' in raw_name or raw_name == 'US':
+            norm_name = 'United States (US)'
+        elif 'European Union' in raw_name or raw_name == 'EU':
+            norm_name = 'European Union (EU)'
+        else:
+            norm_name = raw_name
+
+        flag, border_color = flag_map.get(norm_name, ('🌐', '#3b82f6'))
+
+        sub_points = re.findall(
+            r'(?:^|\n)\s*(?:-\s+|\*\s+|\d+\.\s+)?(?:\*\*)?([A-Za-z0-9\s&,–\-\/]+?)(?:\*\*)?\s*:\s*([^\n]+(?:\n(?!\s*(?:-\s+|\*\s+|\d+\.\s+|\*\*[A-Z]))[^\n]+)*)',
+            block
+        )
+
+        content_items = []
+        for topic, detail in sub_points:
+            topic_clean = topic.strip()
+            detail_clean = detail.strip()
+            if topic_clean in ('United States (US)', 'European Union (EU)', 'China', 'Japan', raw_name):
+                continue
+            content_items.append(
+                f'<div style="margin-bottom: 10px; line-height: 1.6; color: #334155; font-size: 0.88rem;">'
+                f'<strong style="color: #0f172a;">{topic_clean}:</strong> {detail_clean}'
+                f'</div>'
+            )
+
+        if not content_items:
+            cleaned_text = re.sub(region_regex, '', block).strip()
+            cleaned_text = re.sub(r'^(?:-\s+|\*\s+|\d+\.\s+)', '', cleaned_text)
+            content_items.append(
+                f'<div style="line-height: 1.6; color: #334155; font-size: 0.88rem;">{cleaned_text}</div>'
+            )
+
+        card_html = f"""
+<div style="background: #ffffff; border: 1px solid #e2e8f0; border-left: 5px solid {border_color}; border-radius: 8px; padding: 16px 18px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+  <div style="font-size: 1.05rem; font-weight: 800; color: #0f172a; margin-bottom: 10px; display: flex; align-items: center;">
+    <span>{flag} {norm_name}</span>
+  </div>
+  {''.join(content_items)}
+</div>"""
+        cards.append(card_html)
+
+    if cards:
+        intro_text = '\n\n'.join(intro_lines) + '\n\n' if intro_lines else ''
+        new_body = intro_text + '\n'.join(cards) + '\n\n'
+        start_idx = match.start(2)
+        end_idx = match.end(2)
+        return markdown_text[:start_idx] + new_body + markdown_text[end_idx:]
+
+    return markdown_text
+
+
 def normalize_scouted_opportunities(markdown_text: str) -> str:
     """
     Transforms dense/dyslexic-unfriendly numbered lists of scouted stocks into
@@ -171,12 +260,12 @@ def format_scorecard_summary(html_content: str) -> str:
     Replaces dense bulleted Scorecard Summary lists with a clean, executive
     4-box KPI grid with no bullet points.
     """
-    pattern = r'(?:<h[34][^>]*>|<p[^>]*><strong>|<p[^>]*>)\s*Scorecard Summary.*?(?:</h[34]>|</strong></p>|</p>)\s*<ul>(.*?)</ul>|<p[^>]*>\s*Scorecard Summary\s*[\n<](.*?)</p>'
+    pattern = r'(?:<h[34][^>]*>|<p[^>]*><strong>|<p[^>]*>)\s*Scorecard Summary.*?(?:</h[34]>|</strong></p>|</p>)\s*(?:<ul>(.*?)</ul>|<p>(.*?)</p>)|<p[^>]*>\s*Scorecard Summary\s*[\n<](.*?)</p>'
     match = re.search(pattern, html_content, re.IGNORECASE | re.DOTALL)
     if not match:
         return html_content
 
-    ul_content = match.group(1) or match.group(2) or ""
+    ul_content = match.group(1) or match.group(2) or match.group(3) or ""
 
     total_picks = "N/A"
     win_rate = "N/A"
@@ -495,7 +584,10 @@ def build_html_body(subject: str, markdown_content: str, is_weekly: bool = False
     """
     Converts report markdown into a beautifully designed HTML document.
     """
-    # 1. Normalize any numbered scouted opportunities into clean stock cards
+    # 1. Normalize regional developments (no numbered bullets, clean regional cards)
+    markdown_content = format_regional_developments(markdown_content)
+
+    # 2. Normalize any numbered scouted opportunities into clean stock cards
     markdown_content = normalize_scouted_opportunities(markdown_content)
 
     tldr_html = extract_tldr(markdown_content)

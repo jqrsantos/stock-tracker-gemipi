@@ -1209,15 +1209,76 @@ def generate_weekly_pdf(markdown_content: str, output_pdf_path: str) -> bool:
     print_css = """
 <style>
 @media print {
-  body { background-color: #ffffff !important; }
-  .email-card-wrapper { max-width: 100% !important; border: none !important; box-shadow: none !important; }
-  .email-container-cell { padding: 0 !important; }
   @page {
-    size: A4;
-    margin: 14mm 12mm 14mm 12mm;
+    size: A4 portrait;
+    margin: 10mm 10mm 10mm 10mm;
   }
-  tr { page-break-inside: avoid; }
-  div[id^="card-"] { page-break-inside: avoid; margin-bottom: 22px; }
+  * {
+    box-sizing: border-box !important;
+  }
+  html, body {
+    background-color: #ffffff !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  .email-outer-table {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  .email-container-cell {
+    padding: 0 !important;
+    width: 100% !important;
+  }
+  .email-card-wrapper {
+    width: 100% !important;
+    max-width: 100% !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+  }
+  .content-body {
+    padding: 10px 0 !important;
+  }
+  .table-wrap {
+    overflow: visible !important;
+    width: 100% !important;
+    box-shadow: none !important;
+    border: 1px solid #cbd5e1 !important;
+  }
+  .data-table {
+    width: 100% !important;
+    min-width: 0 !important;
+    table-layout: fixed !important;
+    font-size: 6.5pt !important;
+  }
+  .th-cell {
+    padding: 5px 3px !important;
+    font-size: 6pt !important;
+    white-space: normal !important;
+    word-break: break-word !important;
+    overflow-wrap: break-word !important;
+  }
+  .td-cell, .td-num, .td-center {
+    padding: 4px 3px !important;
+    font-size: 6.5pt !important;
+    word-break: break-word !important;
+    overflow-wrap: break-word !important;
+    white-space: normal !important;
+  }
+  .pill-green, .pill-red {
+    font-size: 5.5pt !important;
+    padding: 1px 3px !important;
+  }
+  div[id="macro-stress"], div[id="pruning-overview"], div[id="case-study-now"], div[id^="card-"] {
+    page-break-inside: avoid !important;
+    margin-bottom: 16px !important;
+  }
+  tr {
+    page-break-inside: avoid !important;
+  }
 }
 </style>
 """

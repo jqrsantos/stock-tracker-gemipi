@@ -338,3 +338,113 @@ def test_format_regional_developments_removes_numbers_and_creates_cards():
     assert "Monetary Policy & Inflation:" in formatted_headings
 
 
+def test_format_weekly_audit_generates_dashboard_and_cards():
+    from notifier import format_weekly_audit, build_html_body
+    md_sample = """# Weekly Watchlist Audit & Deep Scour Dossier: 2026-10-24
+
+## Executive Summary & Strategic Landscape
+
+### The Macroeconomic Stress Environment (October 2026)
+- **Benchmark 10-Year U.S. Treasury Yields**: Anchored between **5.09% and 5.15%**.
+- **Federal Reserve Policy**: Restrictive target range of **3.75%–4.00%**.
+- **Global Energy & Supply Friction**: Front-month Brent crude holding firm at **$100–$110/bbl**.
+- **Consumer Bifurcation**: Resilient upper-income consumption vs price resistance.
+
+### Pruning Verdict Overview
+- **Total Tracked Equities Audited**: **51 Stocks**
+- **Retained as `ACTIVE` (High Conviction Compounding Fortresses)**: **32 Stocks (62.7%)**
+- **Expelled as `DISMISSED` (Broken Theses, Dilution Mills, Debt Walls)**: **19 Stocks (37.3%)**
+
+---
+
+## [WATCHLIST PRUNING LEDGER & METRICS]
+
+### Master Watchlist Pruning Ledger
+
+| Ticker | Company Name | 1st Alert Price | Current Price | Alert Return % | Status |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| MSFT | Microsoft Corporation | $354.76 | $524.51 | +47.85% | ACTIVE |
+| ROL | Rollins, Inc. | $38.00 | $26.00 | -31.57% | DISMISSED |
+
+---
+
+## [DIP OPPORTUNITY SCORECARD]
+
+### The ServiceNow (NOW) Case Study: The Superiority of Dip Patience
+Case study details here.
+
+### Top Post-Alert Dip Gainers vs. Structural Value Traps
+Comparison details here.
+
+---
+
+## [DEEP COMPANY AUDITS]
+
+### MSFT - Microsoft Corporation (Verdict: ACTIVE | Conviction: 10/10)
+- **Alert Date**: 2026-05-12 | **Alert Price**: $354.76 | **Current Price**: $524.51 | **Day-1 Return**: +47.85%
+
+#### 1. Financial Forensics (10-K/10-Q)
+Revenue accelerated 16% YoY.
+
+#### 2. Moat Durability & Competitive Threat Analysis
+Enterprise mission-critical software.
+
+#### 3. Downside Catalysts & Macro Vulnerability
+Capex demands for hyperscale AI.
+
+#### 4. Final Verdict & Synthesis / Buying Zone
+Unshakable moat. Buying Zone: Accumulate on pullbacks near $460-$480.
+
+### ROL - Rollins, Inc. (Verdict: DISMISSED | Conviction: 2/10)
+- **Alert Date**: 2026-06-01 | **Alert Price**: $38.00 | **Current Price**: $26.00 | **Day-1 Return**: -31.57%
+
+#### 1. Financial Forensics (10-K/10-Q)
+Debt rising from M&A.
+
+#### 2. Moat Durability & Competitive Threat Analysis
+Pest control commoditization.
+
+#### 3. Downside Catalysts & Macro Vulnerability
+Margin erosion.
+
+#### 4. Final Verdict & Dismissal Autopsy
+Overpriced M&A roll-up. Capital reallocated to high ROIC fortresses.
+"""
+
+    formatted_md = format_weekly_audit(md_sample)
+
+    # 1. Quick jump navigation
+    assert 'href="#pruning-overview"' in formatted_md
+    assert 'href="#macro-stress"' in formatted_md
+    assert 'href="#pruning-ledger"' in formatted_md
+    assert 'href="#dip-scorecard"' in formatted_md
+    assert 'href="#active-audits"' in formatted_md
+    assert 'href="#dismissed-audits"' in formatted_md
+
+    # 2. KPI Grids and Cards
+    assert 'id="macro-stress"' in formatted_md
+    assert 'id="pruning-overview"' in formatted_md
+    assert 'id="case-study-now"' in formatted_md
+
+    # 3. Active vs Dismissed separation
+    assert 'id="active-audits"' in formatted_md
+    assert 'id="dismissed-audits"' in formatted_md
+    assert '🏰 High-Conviction Active Compounding Fortresses (1 Equities Retained)' in formatted_md
+    assert '🚫 Expelled Value Traps & Broken Theses (1 Equities Dismissed)' in formatted_md
+    assert 'border-left: 5px solid #10b981' in formatted_md  # MSFT active card
+    assert 'border-left: 5px solid #ef4444' in formatted_md  # ROL dismissed card
+
+    # 4. Full HTML build with weekly flag
+    html = build_html_body("Weekly Watchlist Audit", md_sample, is_weekly=True)
+    assert "⚡ Weekly Watchlist Audit Executive Summary" in html
+    assert "max-width: 780px" in html
+    assert "WEEKLY WATCHLIST AUDIT & DEEP SCOUR DOSSIER" in html
+    assert 'id="pruning-overview"' in html
+    # Active/Dismissed pills in table
+    assert ">ACTIVE</span>" in html
+    assert ">DISMISSED</span>" in html
+    assert "+47.85%</span>" in html
+    assert "-31.57%</span>" in html
+
+
+

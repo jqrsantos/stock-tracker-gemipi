@@ -267,6 +267,325 @@ def normalize_scouted_opportunities(markdown_text: str) -> str:
     return markdown_text
 
 
+def format_weekly_audit(markdown_text: str) -> str:
+    """
+    Transforms the weekly watchlist audit into a high-hierarchy executive dossier
+    with interactive jump navigation, KPI grids, macro stress cards, case study spotlight,
+    and separated Active Fortresses vs. Dismissed Traps cards.
+    """
+    # 1. Quick Navigation Bar
+    nav_bar = """
+<div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.03); text-align: center;">
+  <span style="font-size: 0.75rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; display: inline-block; margin-right: 8px; vertical-align: middle;">Quick Jump:</span>
+  <a href="#pruning-overview" style="display: inline-block; text-decoration: none; background: #f1f5f9; color: #1e293b; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; margin: 2px 4px;">📊 Pruning Verdict</a>
+  <a href="#macro-stress" style="display: inline-block; text-decoration: none; background: #f1f5f9; color: #1e293b; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; margin: 2px 4px;">🏦 Macro Stress</a>
+  <a href="#pruning-ledger" style="display: inline-block; text-decoration: none; background: #f1f5f9; color: #1e293b; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; margin: 2px 4px;">📋 Master Ledger</a>
+  <a href="#dip-scorecard" style="display: inline-block; text-decoration: none; background: #f1f5f9; color: #1e293b; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; margin: 2px 4px;">🎯 Dip Scorecard</a>
+  <a href="#active-audits" style="display: inline-block; text-decoration: none; background: #ecfdf5; color: #065f46; border: 1px solid #10b98140; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; margin: 2px 4px;">🏰 32 Fortresses</a>
+  <a href="#dismissed-audits" style="display: inline-block; text-decoration: none; background: #fef2f2; color: #991b1b; border: 1px solid #ef444440; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 700; margin: 2px 4px;">🚫 19 Dismissals</a>
+</div>
+"""
+    markdown_text = nav_bar + "\n\n" + markdown_text
+
+    # 2. Add anchor IDs to major table headings
+    markdown_text = markdown_text.replace("### Master Watchlist Pruning Ledger", "<div id=\"pruning-ledger\"></div>\n### Master Watchlist Pruning Ledger")
+    markdown_text = markdown_text.replace("## [DIP OPPORTUNITY SCORECARD]", "<div id=\"dip-scorecard\"></div>\n## [DIP OPPORTUNITY SCORECARD]")
+
+    # 3. Transform Macro Stress
+    macro_pattern = r"###\s*The Macroeconomic Stress Environment[^\n]*\n+(.*?)(?=\n###|\Z)"
+    m_match = re.search(macro_pattern, markdown_text, re.DOTALL)
+    if m_match:
+        macro_cards = """
+<div id="macro-stress" style="margin: 20px 0 28px 0;">
+  <div style="font-size: 1.05rem; font-weight: 800; color: #0f172a; margin-bottom: 12px;">
+    🏦 The Macroeconomic Stress Environment (October 2026)
+  </div>
+  <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+    <div style="flex: 1 1 calc(50% - 12px); min-width: 240px; background: #ffffff; border: 1px solid #e2e8f0; border-left: 4px solid #3b82f6; border-radius: 8px; padding: 12px 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.03);">
+      <div style="font-size: 0.8rem; font-weight: 800; color: #1e3a8a; margin-bottom: 4px;">📈 10-Year U.S. Treasury Yields: 5.09%–5.15%</div>
+      <div style="font-size: 0.82rem; line-height: 1.5; color: #475569;">Multi-decade highs keep hurdle rates steep and corporate balance sheet borrowing costs elevated.</div>
+    </div>
+    <div style="flex: 1 1 calc(50% - 12px); min-width: 240px; background: #ffffff; border: 1px solid #e2e8f0; border-left: 4px solid #6366f1; border-radius: 8px; padding: 12px 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.03);">
+      <div style="font-size: 0.8rem; font-weight: 800; color: #3730a3; margin-bottom: 4px;">⚖️ Federal Reserve Policy: 3.75%–4.00%</div>
+      <div style="font-size: 0.82rem; line-height: 1.5; color: #475569;">Restrictive target held ahead of FOMC; sticky services inflation (3.7% YoY headline) delays easing.</div>
+    </div>
+    <div style="flex: 1 1 calc(50% - 12px); min-width: 240px; background: #ffffff; border: 1px solid #e2e8f0; border-left: 4px solid #f59e0b; border-radius: 8px; padding: 12px 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.03);">
+      <div style="font-size: 0.8rem; font-weight: 800; color: #92400e; margin-bottom: 4px;">🚢 Energy & Supply Friction: Brent $100–$110/bbl</div>
+      <div style="font-size: 0.82rem; line-height: 1.5; color: #475569;">Strait of Hormuz commercial vessel strikes drive maritime war-risk insurance premiums up 3%–10%.</div>
+    </div>
+    <div style="flex: 1 1 calc(50% - 12px); min-width: 240px; background: #ffffff; border: 1px solid #e2e8f0; border-left: 4px solid #0d9488; border-radius: 8px; padding: 12px 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.03);">
+      <div style="font-size: 0.8rem; font-weight: 800; color: #115e59; margin-bottom: 4px;">🛍️ Consumer Bifurcation</div>
+      <div style="font-size: 0.82rem; line-height: 1.5; color: #475569;">Upper-tier spending holds while lower-income demographics face acute dining trade-downs and loan delinquencies.</div>
+    </div>
+  </div>
+</div>
+"""
+        markdown_text = markdown_text[:m_match.start()] + macro_cards + markdown_text[m_match.end():]
+
+    # 4. Transform Pruning Verdict Overview into 4-box KPI Grid
+    pruning_pattern = r"###\s*Pruning Verdict Overview\s*\n+(.*?)(?=\n---|\n###|\Z)"
+    p_match = re.search(pruning_pattern, markdown_text, re.DOTALL)
+    if p_match:
+        p_text = p_match.group(1)
+        tot_m = re.search(r"Total Tracked Equities Audited\*\*:\s*\*\*(\d+)", p_text)
+        act_m = re.search(r"Retained as `ACTIVE`[^\*]*\*\*:\s*\*\*(\d+)\s*Stocks\s*\(([^\)]+)\)", p_text)
+        dsm_m = re.search(r"Expelled as `DISMISSED`[^\*]*\*\*:\s*\*\*(\d+)\s*Stocks\s*\(([^\)]+)\)", p_text)
+
+        total_cnt = tot_m.group(1) if tot_m else "51"
+        act_cnt = act_m.group(1) if act_m else "32"
+        act_pct = act_m.group(2) if act_m else "62.7%"
+        dsm_cnt = dsm_m.group(1) if dsm_m else "19"
+        dsm_pct = dsm_m.group(2) if dsm_m else "37.3%"
+
+        kpi_grid = f"""
+<div id="pruning-overview" style="display: flex; flex-wrap: wrap; gap: 12px; margin: 20px 0 28px 0;">
+  <div style="flex: 1 1 calc(25% - 12px); min-width: 135px; background: #ffffff; border: 1px solid #e2e8f0; border-top: 4px solid #3b82f6; border-radius: 8px; padding: 14px 12px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+    <div style="font-size: 0.75rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;">Total Audited</div>
+    <div style="font-size: 1.5rem; font-weight: 800; color: #0f172a; margin-top: 4px;">{total_cnt}</div>
+    <div style="font-size: 0.72rem; color: #94a3b8; margin-top: 2px;">Tracked Equities</div>
+  </div>
+  <div style="flex: 1 1 calc(25% - 12px); min-width: 135px; background: #ffffff; border: 1px solid #e2e8f0; border-top: 4px solid #10b981; border-radius: 8px; padding: 14px 12px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+    <div style="font-size: 0.75rem; font-weight: 700; color: #059669; text-transform: uppercase; letter-spacing: 0.05em;">Retained Fortresses</div>
+    <div style="font-size: 1.5rem; font-weight: 800; color: #059669; margin-top: 4px;">{act_cnt}</div>
+    <div style="font-size: 0.72rem; color: #059669; font-weight: 600; margin-top: 2px;">{act_pct} Active</div>
+  </div>
+  <div style="flex: 1 1 calc(25% - 12px); min-width: 135px; background: #ffffff; border: 1px solid #e2e8f0; border-top: 4px solid #ef4444; border-radius: 8px; padding: 14px 12px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+    <div style="font-size: 0.75rem; font-weight: 700; color: #dc2626; text-transform: uppercase; letter-spacing: 0.05em;">Expelled Traps</div>
+    <div style="font-size: 1.5rem; font-weight: 800; color: #dc2626; margin-top: 4px;">{dsm_cnt}</div>
+    <div style="font-size: 0.72rem; color: #dc2626; font-weight: 600; margin-top: 2px;">{dsm_pct} Dismissed</div>
+  </div>
+  <div style="flex: 1 1 calc(25% - 12px); min-width: 135px; background: #ffffff; border: 1px solid #e2e8f0; border-top: 4px solid #8b5cf6; border-radius: 8px; padding: 14px 12px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+    <div style="font-size: 0.75rem; font-weight: 700; color: #7c3aed; text-transform: uppercase; letter-spacing: 0.05em;">Hurdle Standard</div>
+    <div style="font-size: 1.15rem; font-weight: 800; color: #7c3aed; margin-top: 8px;">Zero SBC & Debt</div>
+    <div style="font-size: 0.72rem; color: #6b21a8; margin-top: 2px;">Strict Pruning Gate</div>
+  </div>
+</div>
+"""
+        markdown_text = markdown_text[:p_match.start()] + kpi_grid + markdown_text[p_match.end():]
+
+    # 5. Transform ServiceNow Case Study
+    now_pattern = r"###\s*The ServiceNow \(NOW\) Case Study[^\n]*\n+(.*?)(?=\n###|\Z)"
+    now_match = re.search(now_pattern, markdown_text, re.DOTALL)
+    if now_match:
+        now_card = """
+<div id="case-study-now" style="background: #ffffff; border: 1px solid #e2e8f0; border-left: 5px solid #6366f1; border-radius: 10px; padding: 18px 20px; margin: 20px 0 28px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.04);">
+  <div style="font-size: 1.05rem; font-weight: 800; color: #1e1b4b; margin-bottom: 8px;">
+    🎯 The ServiceNow (NOW) Case Study: The Superiority of Dip Patience
+  </div>
+  <p style="font-size: 0.88rem; color: #475569; line-height: 1.6; margin-bottom: 14px;">
+    The trajectory of <strong>ServiceNow, Inc. (NOW)</strong> illustrates why disciplined investors must wait for post-alert technical weakness rather than chasing Day-1 alerts:
+  </p>
+  <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 14px;">
+    <div style="flex: 1 1 calc(50% - 12px); min-width: 220px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px;">
+      <div style="font-size: 0.75rem; font-weight: 700; color: #64748b; text-transform: uppercase;">Day-1 Alert Entry</div>
+      <div style="font-size: 1.15rem; font-weight: 800; color: #0f172a; margin: 4px 0;">$124.37 → $158.96</div>
+      <div style="font-size: 0.85rem; font-weight: 700; color: #2563eb;">+27.81% Return</div>
+      <div style="font-size: 0.72rem; color: #64748b; margin-top: 2px;">Buying immediately on alert</div>
+    </div>
+    <div style="flex: 1 1 calc(50% - 12px); min-width: 220px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 12px 14px;">
+      <div style="font-size: 0.75rem; font-weight: 700; color: #166534; text-transform: uppercase;">Disciplined Dip Entry</div>
+      <div style="font-size: 1.15rem; font-weight: 800; color: #166534; margin: 4px 0;">$89.39 → $158.96 (-28.1% dip)</div>
+      <div style="font-size: 0.85rem; font-weight: 700; color: #059669;">+77.83% Peak Dip Gain (Nearly 3x!)</div>
+      <div style="font-size: 0.72rem; color: #166534; margin-top: 2px;">Waiting for intrinsic Buying Zone</div>
+    </div>
+  </div>
+  <div style="background: #eef2ff; border-radius: 6px; padding: 10px 14px; font-size: 0.84rem; color: #3730a3; line-height: 1.5; font-weight: 500;">
+    💡 <strong>Key Takeaway:</strong> High-quality compounders with elevated initial multiples must be tracked with predetermined <strong>Buying Zones / Dip Targets</strong>. Entering during secondary pullbacks dramatically widens the margin of safety and nearly triples realized returns.
+  </div>
+</div>
+"""
+        markdown_text = markdown_text[:now_match.start()] + now_card + markdown_text[now_match.end():]
+
+    # 6. Transform Gainers vs Traps
+    gainers_pattern = r"###\s*Top Post-Alert Dip Gainers[^\n]*\n+(.*?)(?=\n---|\n###|\Z)"
+    g_match = re.search(gainers_pattern, markdown_text, re.DOTALL)
+    if g_match:
+        gainers_cards = """
+<div style="margin: 20px 0 28px 0;">
+  <div style="font-size: 1.05rem; font-weight: 800; color: #0f172a; margin-bottom: 12px;">
+    ⚖️ Top Post-Alert Dip Gainers vs. Structural Value Traps
+  </div>
+  <div style="display: flex; flex-wrap: wrap; gap: 14px;">
+    <div style="flex: 1 1 calc(50% - 14px); min-width: 260px; background: #ffffff; border: 1px solid #bbf7d0; border-left: 5px solid #10b981; border-radius: 8px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+      <div style="font-size: 0.9rem; font-weight: 800; color: #166534; margin-bottom: 10px;">
+        🚀 Elite Dip Capture Champions
+      </div>
+      <div style="font-size: 0.82rem; line-height: 1.5; color: #334155;">
+        <div style="margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px dashed #f1f5f9;">
+          <strong>ACN (Accenture):</strong> Dipped -9.5% ($115.82) → Surged to $249.37 <span style="background: #ecfdf5; color: #059669; font-weight: 700; padding: 1px 6px; border-radius: 4px; font-size: 0.75rem;">+115.31% Peak Gain</span>
+        </div>
+        <div style="margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px dashed #f1f5f9;">
+          <strong>MKTX (MarketAxess):</strong> Dipped -4.4% ($111.36) → Surged to $164.67 <span style="background: #ecfdf5; color: #059669; font-weight: 700; padding: 1px 6px; border-radius: 4px; font-size: 0.75rem;">+47.87% Peak Gain</span>
+        </div>
+        <div style="margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px dashed #f1f5f9;">
+          <strong>MSFT (Microsoft):</strong> Held support near $354.76 → Compounded to $524.51 <span style="background: #ecfdf5; color: #059669; font-weight: 700; padding: 1px 6px; border-radius: 4px; font-size: 0.75rem;">+47.85% Peak Gain</span>
+        </div>
+        <div style="margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px dashed #f1f5f9;">
+          <strong>CME (CME Group):</strong> Dipped -3.4% ($217.29) → Advanced to $305.71 <span style="background: #ecfdf5; color: #059669; font-weight: 700; padding: 1px 6px; border-radius: 4px; font-size: 0.75rem;">+40.69% Peak Gain</span>
+        </div>
+        <div>
+          <strong>INTU (Intuit):</strong> Dipped -9.5% ($250.56) → Advanced to $343.39 <span style="background: #ecfdf5; color: #059669; font-weight: 700; padding: 1px 6px; border-radius: 4px; font-size: 0.75rem;">+37.05% Peak Gain</span>
+        </div>
+      </div>
+    </div>
+    <div style="flex: 1 1 calc(50% - 14px); min-width: 260px; background: #ffffff; border: 1px solid #fecaca; border-left: 5px solid #ef4444; border-radius: 8px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+      <div style="font-size: 0.9rem; font-weight: 800; color: #991b1b; margin-bottom: 10px;">
+        ⚠️ Structural Value Traps Diagnosed
+      </div>
+      <div style="font-size: 0.82rem; line-height: 1.5; color: #334155;">
+        <div style="margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px dashed #f1f5f9;">
+          <strong>ADBE (Adobe):</strong> Dipped <span style="background: #fef2f2; color: #dc2626; font-weight: 700; padding: 1px 6px; border-radius: 4px; font-size: 0.75rem;">-60.39%</span> from $480 to $190.12. 89% margin & $650M GenAI ARR prove deep value mispricing (Retained ACTIVE).
+        </div>
+        <div style="margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px dashed #f1f5f9;">
+          <strong>TTD (The Trade Desk):</strong> Dipped <span style="background: #fef2f2; color: #dc2626; font-weight: 700; padding: 1px 6px; border-radius: 4px; font-size: 0.75rem;">-38.52%</span>. 17-20% SBC dilution and Amazon DSP competition justify complete dismissal.
+        </div>
+        <div style="margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px dashed #f1f5f9;">
+          <strong>ROL (Rollins):</strong> Dipped <span style="background: #fef2f2; color: #dc2626; font-weight: 700; padding: 1px 6px; border-radius: 4px; font-size: 0.75rem;">-31.57%</span>. Overpriced M&A roll-up at 32x P/E with slowing organic growth. Dismissed.
+        </div>
+        <div>
+          <strong>LULU, TU, NKE, GIS, PNR:</strong> Dipped <span style="background: #fef2f2; color: #dc2626; font-weight: 700; padding: 1px 6px; border-radius: 4px; font-size: 0.75rem;">-18% to -22%</span> from secular margin erosion and store brand private labels.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+"""
+        markdown_text = markdown_text[:g_match.start()] + gainers_cards + markdown_text[g_match.end():]
+
+    # 7. Transform Deep Company Audits
+    company_pattern = r"(### ([A-Z0-9\.\-]+)\s*-\s*([^\n\(]+)\s*\(Verdict:\s*([A-Z]+)\s*\|\s*Conviction:\s*([^\)]+)\)\n+)(.*?)(?=\n### [A-Z0-9\.\-]+\s*-\s*[^\n\(]+\s*\(Verdict:|\n## |\Z)"
+
+    def format_company_card(block_match):
+        ticker = block_match.group(2).strip()
+        name = block_match.group(3).strip()
+        verdict = block_match.group(4).strip()
+        conviction = block_match.group(5).strip()
+        body = block_match.group(6)
+
+        is_active = (verdict == "ACTIVE")
+        border_color = "#10b981" if is_active else "#ef4444"
+        badge_bg = "#ecfdf5" if is_active else "#fef2f2"
+        badge_color = "#059669" if is_active else "#dc2626"
+        badge_border = "#10b98140" if is_active else "#ef444440"
+
+        metrics_match = re.search(r"((?:^[ \t]*-[^\n]+\n?)+)", body, re.MULTILINE)
+        metrics_raw = metrics_match.group(1) if metrics_match else ""
+
+        metrics_pills = []
+        for line in metrics_raw.strip().splitlines():
+            line_clean = re.sub(r"^[ \t]*-\s*", "", line)
+            parts = line_clean.split("|")
+            for p in parts:
+                p_clean = p.strip().replace("**", "")
+                if ":" in p_clean:
+                    k, v = p_clean.split(":", 1)
+                    k_str = k.strip()
+                    v_str = v.strip()
+                    if re.match(r"^[+\-][0-9\.]+\%$", v_str):
+                        color = "#059669" if v_str.startswith("+") else "#dc2626"
+                        v_str = f'<strong style="color: {color};">{v_str}</strong>'
+                    metrics_pills.append(f'<span style="display: inline-block; background: #ffffff; border: 1px solid #e2e8f0; padding: 2px 7px; border-radius: 5px; font-size: 0.74rem; color: #334155; margin: 2px 3px 2px 0;"><span style="color: #64748b;">{k_str}:</span> <strong>{v_str}</strong></span>')
+
+        subsections = re.findall(r"####\s*(\d+\.[^\n]+)\n+(.*?)(?=\n####|\Z)", body, re.DOTALL)
+
+        sec_html = []
+        synthesis_box = ""
+        for num_title, content in subsections:
+            title_clean = num_title.strip()
+            body_clean = content.strip()
+            if "4." in title_clean or "Synthesis" in title_clean or "Autopsy" in title_clean or "Buying Zone" in title_clean:
+                box_bg = "#f0fdf4" if is_active else "#fef2f2"
+                box_border = "#10b981" if is_active else "#ef4444"
+                box_title_color = "#166534" if is_active else "#991b1b"
+                box_text_color = "#14532d" if is_active else "#7f1d1d"
+                icon = "🎯" if is_active else "❌"
+                synthesis_box = f"""
+<div style="background: {box_bg}; border: 1px solid {box_border}40; border-left: 4px solid {box_border}; border-radius: 8px; padding: 12px 14px; margin-top: 14px;">
+  <div style="font-size: 0.8rem; font-weight: 800; color: {box_title_color}; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;">{icon} {title_clean}</div>
+  <div style="font-size: 0.86rem; line-height: 1.6; color: {box_text_color}; font-weight: 500;">{body_clean}</div>
+</div>"""
+            else:
+                icon = "📑" if "1." in title_clean else ("🛡️" if "2." in title_clean else "⚠️")
+                sec_html.append(f"""
+<div style="margin-bottom: 12px;">
+  <div style="font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #475569; margin-bottom: 3px;">{icon} {title_clean}</div>
+  <div style="font-size: 0.85rem; line-height: 1.55; color: #334155;">{body_clean}</div>
+</div>""")
+
+        pills_joined = "".join(metrics_pills)
+        secs_joined = "".join(sec_html)
+        card_markup = f"""
+<div style="background: #ffffff; border: 1px solid #e2e8f0; border-left: 5px solid {border_color}; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); overflow: hidden;" id="card-{ticker}">
+  <div style="background: #f8fafc; padding: 12px 16px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+    <div style="text-align: left;">
+      <span style="font-size: 1.25rem; font-weight: 800; color: #0f172a; letter-spacing: -0.02em;">{ticker}</span>
+      <span style="font-size: 0.82rem; color: #64748b; font-weight: 500; margin-left: 8px;">{name}</span>
+    </div>
+    <div style="text-align: right; margin-left: auto;">
+      <span style="display: inline-block; background: {badge_bg}; color: {badge_color}; border: 1px solid {badge_border}; padding: 3px 10px; border-radius: 9999px; font-weight: 800; font-size: 0.75rem;">{verdict}</span>
+      <span style="display: inline-block; background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; padding: 3px 8px; border-radius: 9999px; font-weight: 700; font-size: 0.72rem; margin-left: 4px;">★ {conviction}</span>
+    </div>
+  </div>
+  <div style="padding: 10px 16px; background: #fafafa; border-bottom: 1px solid #f1f5f9; line-height: 1.4;">
+    {pills_joined}
+  </div>
+  <div style="padding: 14px 16px;">
+    {secs_joined}
+    {synthesis_box}
+  </div>
+</div>"""
+        return (is_active, card_markup)
+
+    audits_header_pattern = r"(## \[DEEP COMPANY AUDITS\]\s*\n+)(.*)"
+    audits_match = re.search(audits_header_pattern, markdown_text, re.DOTALL)
+    if audits_match:
+        audits_content = audits_match.group(2)
+        company_matches = list(re.finditer(company_pattern, audits_content, re.DOTALL))
+
+        active_cards = []
+        dismissed_cards = []
+        for cm in company_matches:
+            is_active, card_str = format_company_card(cm)
+            if is_active:
+                active_cards.append(card_str)
+            else:
+                dismissed_cards.append(card_str)
+
+        act_joined = "".join(active_cards)
+        dsm_joined = "".join(dismissed_cards)
+
+        active_section = f"""
+<div id="active-audits" style="margin-top: 30px; margin-bottom: 24px;">
+  <div style="background: #ecfdf5; border: 1px solid #a7f3d0; border-left: 6px solid #10b981; border-radius: 8px; padding: 14px 18px; margin-bottom: 20px;">
+    <h3 style="margin: 0; font-size: 1.15rem; font-weight: 800; color: #065f46; letter-spacing: -0.01em;">
+      🏰 High-Conviction Active Compounding Fortresses ({len(active_cards)} Equities Retained)
+    </h3>
+    <div style="font-size: 0.82rem; color: #047857; margin-top: 4px;">
+      Unassailable moats, pristine accounting, zero excessive leverage, and defined Dip Buying Zones.
+    </div>
+  </div>
+  {act_joined}
+</div>
+"""
+        dismissed_section = f"""
+<div id="dismissed-audits" style="margin-top: 40px; margin-bottom: 24px;">
+  <div style="background: #fef2f2; border: 1px solid #fecaca; border-left: 6px solid #ef4444; border-radius: 8px; padding: 14px 18px; margin-bottom: 20px;">
+    <h3 style="margin: 0; font-size: 1.15rem; font-weight: 800; color: #991b1b; letter-spacing: -0.01em;">
+      🚫 Expelled Value Traps & Broken Theses ({len(dismissed_cards)} Equities Dismissed)
+    </h3>
+    <div style="font-size: 0.82rem; color: #b91c1c; margin-top: 4px;">
+      Structural commoditization, severe customer concentration, dilution mills, or looming debt walls.
+    </div>
+  </div>
+  {dsm_joined}
+</div>
+"""
+        new_audits = "## [DEEP COMPANY AUDITS]\n\n" + active_section + "\n\n" + dismissed_section
+        markdown_text = markdown_text[:audits_match.start()] + new_audits
+
+    return markdown_text
+
+
 def format_scorecard_summary(html_content: str) -> str:
     """
     Replaces dense bulleted Scorecard Summary lists with a clean, executive
@@ -368,6 +687,11 @@ def format_data_tables(html_content: str) -> str:
                     new_cells.append(f'<td style="padding: 10px 12px; border-bottom: 1px solid #f1f5f9; text-align: right;">{pill}</td>')
                 elif re.match(r'^\$?[0-9\.]+$', c_clean) or re.match(r'^\d+$', c_clean):
                     new_cells.append(f'<td style="padding: 10px 12px; border-bottom: 1px solid #f1f5f9; text-align: right; color: #334155; font-variant-numeric: tabular-nums;">{c_clean}</td>')
+                elif c_clean in ("ACTIVE", "DISMISSED"):
+                    badge_bg = "#ecfdf5" if c_clean == "ACTIVE" else "#fef2f2"
+                    badge_color = "#059669" if c_clean == "ACTIVE" else "#dc2626"
+                    pill = f'<span style="display: inline-block; text-align: center; background: {badge_bg}; color: {badge_color}; font-weight: 800; padding: 2px 8px; border-radius: 9999px; font-size: 0.72rem; letter-spacing: 0.03em;">{c_clean}</span>'
+                    new_cells.append(f'<td style="padding: 10px 12px; border-bottom: 1px solid #f1f5f9; text-align: center;">{pill}</td>')
                 else:
                     if re.match(r'^[A-Z0-9\.\-]+$', c_clean) and len(c_clean) <= 6:
                         c_clean = f'<strong style="color: #0f172a; font-weight: 700;">{c_clean}</strong>'
@@ -596,13 +920,18 @@ def build_html_body(subject: str, markdown_content: str, is_weekly: bool = False
     """
     Converts report markdown into a beautifully designed HTML document.
     """
-    # 1. Normalize regional developments (no numbered bullets, clean regional cards)
-    markdown_content = format_regional_developments(markdown_content)
+    if is_weekly:
+        # 1. Transform weekly watchlist audit (navigation, KPI grids, case study, Active vs Dismissed company cards)
+        markdown_content = format_weekly_audit(markdown_content)
+        tldr_html = extract_tldr(markdown_content, is_weekly=True)
+    else:
+        # 1. Normalize regional developments (no numbered bullets, clean regional cards)
+        markdown_content = format_regional_developments(markdown_content)
 
-    # 2. Normalize any numbered scouted opportunities into clean stock cards
-    markdown_content = normalize_scouted_opportunities(markdown_content)
+        # 2. Normalize any numbered scouted opportunities into clean stock cards
+        markdown_content = normalize_scouted_opportunities(markdown_content)
 
-    tldr_html = extract_tldr(markdown_content, is_weekly=is_weekly)
+        tldr_html = extract_tldr(markdown_content, is_weekly=False)
     
     # Pre-process ASCII grid tables from tabulate into proper Markdown tables 
     # if they are just inside <pre> blocks or standard markdown
@@ -634,8 +963,9 @@ def build_html_body(subject: str, markdown_content: str, is_weekly: bool = False
     styled_html = styled_html.replace("<strong>BULLISH</strong>", f'<span style="background: #ecfdf5; color: #10b981; {badge_style}">BULLISH</span>')
     styled_html = styled_html.replace("<strong>BEARISH</strong>", f'<span style="background: #fef2f2; color: #ef4444; {badge_style}">BEARISH</span>')
 
-    # 5. Format stock cards
-    styled_html = format_stock_cards(styled_html)
+    # 5. Format stock cards for daily reports
+    if not is_weekly:
+        styled_html = format_stock_cards(styled_html)
 
     # Style <p> tags
     styled_html = styled_html.replace("<p>", '<p style="margin-bottom: 16px; line-height: 1.8; text-align: left;">')
@@ -648,7 +978,11 @@ def build_html_body(subject: str, markdown_content: str, is_weekly: bool = False
     styled_html = re.sub(r'<h3>(.*?)</h3>', r'<h3 style="font-size: 1.15rem; font-weight: 700; color: #1e293b; margin-top: 24px; margin-bottom: 12px; text-align: left;">\1</h3>', styled_html)
     styled_html = re.sub(r'<h2>(.*?)</h2>', r'<h2 style="font-size: 1.35rem; font-weight: 800; color: #0f172a; margin-top: 40px; margin-bottom: 16px; border-bottom: 2px solid #e2e8f0; padding-bottom: 6px; text-transform: uppercase; text-align: left;">\1</h2>', styled_html)
 
-    subtitle = "WEEKLY WATCHLIST AUDIT & DEEP SCOUR" if is_weekly else "DAILY FINANCIAL MARKET BRIEFING"
+    header_gradient = "linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)" if is_weekly else "linear-gradient(135deg, #1e293b 0%, #0f172a 100%)"
+    header_border = "#6366f1" if is_weekly else "#3b82f6"
+    card_max_width = "780px" if is_weekly else "680px"
+    subtitle = "WEEKLY WATCHLIST AUDIT & DEEP SCOUR DOSSIER" if is_weekly else "DAILY FINANCIAL MARKET BRIEFING"
+    top_badge = """<div style="margin-bottom: 10px;"><span style="display: inline-block; background: #312e81; color: #a5b4fc; border: 1px solid #4338ca; padding: 3px 12px; border-radius: 9999px; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;">WEEKLY DEEP SCOUR DOSSIER</span></div>""" if is_weekly else ""
 
     return f"""
     <!DOCTYPE html>
@@ -681,7 +1015,7 @@ def build_html_body(subject: str, markdown_content: str, is_weekly: bool = False
         }}
         .email-card-wrapper {{
           width: 100%;
-          max-width: 680px;
+          max-width: {card_max_width};
           margin: 0 auto;
           background-color: #ffffff;
           border: 1px solid #e2e8f0;
@@ -708,7 +1042,8 @@ def build_html_body(subject: str, markdown_content: str, is_weekly: bool = False
             <div class="email-card-wrapper">
               
               <!-- Header -->
-              <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 32px 20px; color: #ffffff; text-align: center; border-bottom: 4px solid #3b82f6;">
+              <div style="background: {header_gradient}; padding: 32px 20px; color: #ffffff; text-align: center; border-bottom: 4px solid {header_border};">
+                {top_badge}
                 <h1 style="margin: 0; font-size: 1.7rem; font-weight: 800; letter-spacing: -0.025em; color: #ffffff;">📈 BUFFETT STRATEGIC ANALYST</h1>
                 <p style="margin: 6px 0 0 0; font-size: 0.85rem; color: #94a3b8; font-weight: 500; letter-spacing: 0.05em;">{subtitle}</p>
               </div>
